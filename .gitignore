@@ -1,0 +1,16 @@
+build/
+VastGui.exe
+VastGuiTests.exe
+VastGui
+VastGuiTests
+imgui.ini
+VastGui.json
+VastGui.json.bad
+VastGui.log
+*.o
+*.obj
+*.res
+
+release/
+InitialPromt.md
+

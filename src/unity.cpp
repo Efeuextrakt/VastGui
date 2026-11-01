@@ -1,0 +1,43 @@
+// Unity build: compiles all application sources as a single translation unit.
+// Third-party sources (Dear ImGui, ImPlot) are compiled separately and cached.
+
+#include "Config.cpp"
+#include "Log.cpp"
+#include "Platform.cpp"
+#include "SecretBox.cpp"
+#include "Theme.cpp"
+#include "App.cpp"
+#include "main.cpp"
+
+#include "backend/ApiKey.cpp"
+#include "backend/Commands.cpp"
+#include "backend/Http.cpp"
+#include "backend/RestBackend.cpp"
+#include "backend/VastClient.cpp"
+
+#include "logic/DefectFilter.cpp"
+#include "logic/DockerOptions.cpp"
+#include "logic/Format.cpp"
+#include "logic/Metrics.cpp"
+#include "logic/QueryBuilder.cpp"
+#include "logic/Regions.cpp"
+#include "logic/SearchFilters.cpp"
+
+#include "views/BillingView.cpp"
+#include "views/ConsoleView.cpp"
+#include "views/HostingView.cpp"
+#include "views/InstancesView.cpp"
+#include "views/KeysView.cpp"
+#include "views/SearchView.cpp"
+#include "views/ServerlessView.cpp"
+#include "views/SettingsView.cpp"
+#include "views/StorageView.cpp"
+#include "views/TeamView.cpp"
+#include "views/TemplatesView.cpp"
+
+#include "widgets/Badge.cpp"
+#include "widgets/OfferCard.cpp"
+#include "widgets/RangeSlider.cpp"
+#include "widgets/Spinner.cpp"
+#include "widgets/Toast.cpp"
+#include "widgets/Widgets.cpp"
