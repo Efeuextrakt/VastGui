@@ -9,6 +9,7 @@
 Find the best GPU offers, rent them and keep an eye on your instances - without a browser, Python or the `vastai` CLI.
 
 [![Latest release](https://img.shields.io/github/v/release/Efeuextrakt/VastGui?label=download&sort=semver)](https://github.com/Efeuextrakt/VastGui/releases/latest)
+[![CI](https://github.com/Efeuextrakt/VastGui/actions/workflows/ci.yml/badge.svg)](https://github.com/Efeuextrakt/VastGui/actions/workflows/ci.yml)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6)
 ![Linux](https://img.shields.io/badge/Linux-build%20from%20source-555)
 ![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C)
@@ -108,6 +109,11 @@ Font Awesome Free, Roboto and Cousine fonts.
 
 These keep their own permissive licenses (MIT, zlib, BSD-2-Clause/CC0, Apache 2.0, SIL OFL 1.1, CC BY 4.0); full
 texts are in [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt), `third_party/` and [res/fonts/](res/fonts/LICENSES.md).
+
+## AI assistance
+
+Large parts of this code were written with AI coding assistants and then reviewed, tested and put together by the
+author. Bug reports are welcome.
 
 ## License
 
