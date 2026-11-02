@@ -51,21 +51,18 @@ jobs:
   windows-msvc:
     name: Windows (MSVC)
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: cmd
     steps:
       - uses: actions/checkout@v7
 
-      - uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-
-      - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=cl
-
+      # build.bat locates Visual Studio via vswhere and loads vcvars64.bat itself, so no setup action is needed.
       - name: Build
-        run: cmake --build build
+        run: build.bat msvc
 
       - name: Test
-        run: ctest --test-dir build --output-on-failure
+        run: build.bat msvc test
 
   linux:
     name: Linux (g++ 13)
