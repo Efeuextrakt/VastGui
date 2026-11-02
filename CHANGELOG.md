@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Build
+- Windows releases are now built with the MSYS2 **UCRT64** toolchain (MinGW-w64 GCC targeting the Universal C
+  Runtime) instead of the deprecated MINGW64 one. `VastGui.exe` imports the system UCRT (`api-ms-win-crt-*.dll`,
+  part of Windows 10/11) instead of `msvcrt.dll`, and still needs no redistributable.
+- GitHub Actions CI builds and tests every push and pull request on Windows (MinGW-w64 UCRT64 and MSVC) and Linux.
+- Fixed the MSVC build (duplicate manifest resource) and the missing executable bit on `build.sh`.
+
 ## 1.1.0 - 2026-11-02
 
 ### Changed

@@ -2,7 +2,7 @@
 rem ---------------------------------------------------------------------------
 rem VastGui build script - wrapper around CMake + Ninja (parallel, incremental)
 rem
-rem   build.bat                release build with MinGW-w64 g++   -> VastGui.exe
+rem   build.bat                release build with MinGW-w64 g++ (MSYS2 UCRT64) -> VastGui.exe
 rem   build.bat debug          debug build (-O0 -g)
 rem   build.bat test           build + run unit tests              -> VastGuiTests.exe
 rem   build.bat package        release build + tests + zip         -> release\VastGui-<ver>-win64.zip
@@ -52,11 +52,11 @@ if "%TOOLCHAIN%"=="msvc" (
     )
     set "COMPILER=cl"
 ) else (
-    where g++ >nul 2>nul || (echo ERROR: g++ not found on PATH. Install MinGW-w64 ^(g++ 13+^) or use "build.bat msvc". & exit /b 1)
+    where g++ >nul 2>nul || (echo ERROR: g++ not found on PATH. Install MinGW-w64 ^(g++ 13+^). MSYS2: pacman -S mingw-w64-ucrt-x86_64-gcc - or use "build.bat msvc". & exit /b 1)
     set "COMPILER=g++"
 )
-where cmake >nul 2>nul || (echo ERROR: cmake not found on PATH. MSYS2: pacman -S mingw-w64-x86_64-cmake & exit /b 1)
-where ninja >nul 2>nul || (echo ERROR: ninja not found on PATH. MSYS2: pacman -S mingw-w64-x86_64-ninja & exit /b 1)
+where cmake >nul 2>nul || (echo ERROR: cmake not found on PATH. MSYS2: pacman -S mingw-w64-ucrt-x86_64-cmake & exit /b 1)
+where ninja >nul 2>nul || (echo ERROR: ninja not found on PATH. MSYS2: pacman -S mingw-w64-ucrt-x86_64-ninja & exit /b 1)
 
 if not exist "%BDIR%\build.ninja" (
     cmake -S . -B "%BDIR%" -G Ninja -DCMAKE_BUILD_TYPE=%BUILD_TYPE% -DCMAKE_CXX_COMPILER=%COMPILER% || exit /b 1

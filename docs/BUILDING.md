@@ -6,10 +6,11 @@
 
 **Windows (primary)**
 
-- MinGW-w64 **g++ 13+** (e.g. [MSYS2](https://www.msys2.org): `pacman -S mingw-w64-ucrt-x86_64-gcc` or the
-  `mingw-w64-x86_64-gcc` package) with `g++`, `windres` on `PATH`, **or**
+- MinGW-w64 **g++ 13+** targeting the UCRT, e.g. [MSYS2](https://www.msys2.org) **UCRT64**:
+  `pacman -S mingw-w64-ucrt-x86_64-gcc`, with `C:\msys64\ucrt64\bin` (`g++`, `windres`) on `PATH`. Releases and
+  CI use this toolchain. The legacy MINGW64 (`msvcrt.dll`) toolchain still builds, but MSYS2 has deprecated it. **Or**:
 - **MSVC 2022** (Visual Studio 2022 / Build Tools with the C++ workload).
-- **CMake 3.20+** and **Ninja** on `PATH` (MSYS2: `pacman -S mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja`;
+- **CMake 3.20+** and **Ninja** on `PATH` (MSYS2: `pacman -S mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja`;
   Visual Studio ships both with its "C++ CMake tools for Windows" component).
 
 **Linux (secondary)**: g++ 13+, `libglfw3-dev`, `libgl-dev`, `libcurl4-openssl-dev`.
@@ -23,7 +24,7 @@ nlohmann/json, doctest, IconFontCppHeaders, Monocypher). No package manager, no 
 build.bat
 ```
 
-That is the whole build (MinGW-w64). Other modes:
+That is the whole build (MinGW-w64, UCRT64). Other modes:
 
 | Command                 | Result                                                             |
 |-------------------------|--------------------------------------------------------------------|
@@ -63,7 +64,8 @@ objdump -p VastGui.exe | findstr "DLL Name"
 ```
 
 Expected (all Windows system DLLs): `bcrypt.dll comdlg32.dll d3d11.dll D3DCOMPILER_47.dll dwmapi.dll GDI32.dll
-KERNEL32.dll msvcrt.dll SHELL32.dll USER32.dll WINHTTP.dll`. With MSVC use `dumpbin /dependents VastGui.exe`.
+KERNEL32.dll SHELL32.dll USER32.dll WINHTTP.dll` plus twelve `api-ms-win-crt-*-l1-1-0.dll` (the Universal C
+Runtime that ships with Windows 10/11). With MSVC use `dumpbin /dependents VastGui.exe`.
 Why each DLL is needed: [DLL_DEPENDENCIES.md](DLL_DEPENDENCIES.md).
 
 ## Project layout

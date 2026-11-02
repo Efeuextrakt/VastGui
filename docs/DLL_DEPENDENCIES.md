@@ -1,16 +1,23 @@
 # VastGui.exe – DLL dependency report
 
-This file explains why `VastGui.exe` (Windows, MinGW-w64 GCC, `-static -static-libgcc -static-libstdc++`) imports each DLL.
+This file explains why `VastGui.exe` (Windows, MinGW-w64 GCC from MSYS2 UCRT64, `-static -static-libgcc -static-libstdc++`) imports each DLL.
 
 Import table (`objdump -p VastGui.exe | findstr "DLL Name"`):
 
 ```
 bcrypt.dll    comdlg32.dll d3d11.dll  D3DCOMPILER_47.dll  dwmapi.dll  GDI32.dll
-KERNEL32.dll  msvcrt.dll   SHELL32.dll USER32.dll         WINHTTP.dll
+KERNEL32.dll  SHELL32.dll  USER32.dll WINHTTP.dll
+
+api-ms-win-crt-convert-l1-1-0.dll     api-ms-win-crt-environment-l1-1-0.dll
+api-ms-win-crt-filesystem-l1-1-0.dll  api-ms-win-crt-heap-l1-1-0.dll
+api-ms-win-crt-locale-l1-1-0.dll      api-ms-win-crt-math-l1-1-0.dll
+api-ms-win-crt-private-l1-1-0.dll     api-ms-win-crt-runtime-l1-1-0.dll
+api-ms-win-crt-stdio-l1-1-0.dll       api-ms-win-crt-string-l1-1-0.dll
+api-ms-win-crt-time-l1-1-0.dll        api-ms-win-crt-utility-l1-1-0.dll
 ```
 
-They are all Windows system DLLs that live in `%WINDIR%\System32`, so the
-executable runs on its own without any redistributable.
+They are all Windows system DLLs that live in `%WINDIR%\System32` (the `api-ms-win-crt-*` names are API sets
+that Windows resolves to `ucrtbase.dll`), so the executable runs on its own without any redistributable.
 
 ## Summary
 
@@ -26,7 +33,7 @@ executable runs on its own without any redistributable.
 | `SHELL32.dll` | `src/Platform.cpp`, ImGui core | Opens URLs and folders in the default browser or Explorer | Yes |
 | `comdlg32.dll` | `src/Platform.cpp` | Native Open/Save file dialogs | Yes |
 | `bcrypt.dll` | `src/Platform.cpp` | `BCryptGenRandom`: random key and nonces for encrypting the API key, unique temp file names | Yes |
-| `msvcrt.dll` | MinGW-w64 C runtime | C runtime (`malloc`, `printf`, `fopen`, `strtod`, …) that libstdc++ is built on | Yes |
+| `api-ms-win-crt-*.dll` (12) | Universal C Runtime (UCRT64 toolchain) | C runtime (`malloc`, `printf`, `fopen`, `strtod`, …) that libstdc++ is built on | Yes |
 
 ## Details per DLL
 
@@ -80,8 +87,10 @@ why `dxgi.dll` is linked in CMake but does not appear in the import table.
   - selecting an SSH public key (Keys view)
   - exporting CSV (Billing, Team audit logs), saving instance logs, and saving the console log
 
-### msvcrt.dll – C runtime
-- MinGW-w64 GCC targets the system `msvcrt.dll` by default. libstdc++ and libgcc are linked statically (`-static-libstdc++ -static-libgcc`). The C runtime itself is still the system DLL, which supplies memory allocation, stdio, string and number conversion, locale, and similar functions.
+### api-ms-win-crt-*.dll – Universal C Runtime (UCRT)
+- The MSYS2 UCRT64 GCC targets the Universal C Runtime, the same C runtime that MSVC uses. libstdc++ and libgcc are linked statically (`-static-libstdc++ -static-libgcc`). The C runtime itself is still the system DLL, which supplies memory allocation, stdio, string and number conversion, locale, and similar functions.
+- The twelve `api-ms-win-crt-*-l1-1-0.dll` imports are API sets (convert, environment, filesystem, heap, locale, math, private, runtime, stdio, string, time, utility). Windows 10/11 resolve them to `ucrtbase.dll`, which is part of the OS.
+- Compared with the legacy MINGW64 toolchain, which imported `msvcrt.dll`, UCRT has standard-conforming `printf`/`strtod` and UTF-8 locale support.
 - No Visual C++ Redistributable (`vcruntime140.dll`, `msvcp140.dll`) is needed.
 
 ## Linked in CMake but not imported
