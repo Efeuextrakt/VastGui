@@ -14,7 +14,7 @@ Find the best GPU offers, rent them and keep an eye on your instances - without 
 ![Linux](https://img.shields.io/badge/Linux-build%20from%20source-555)
 ![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C)
 ![Dear ImGui](https://img.shields.io/badge/UI-Dear%20ImGui-3b7bf6)
-[![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-orange)](LICENSE.md)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE.md)
 
 [Download](#download) · [Features](#highlights) · [Quick start](#quick-start) · [Docs](#documentation) · [Build from source](docs/BUILDING.md)
 
@@ -117,13 +117,9 @@ author. Bug reports are welcome.
 
 ## License
 
-VastGui is **free for non-commercial use** under the [PolyForm Noncommercial License 1.0.0](LICENSE.md):
-personal use, hobby projects, study and research, and use by charities, schools, public research and government
-organizations are allowed, including sharing and modifying it for those purposes. **Commercial use is not
-permitted** - contact the author if you need a commercial license.
+VastGui is licensed under the [MIT License](LICENSE.md).
 
-The bundled third-party components are not covered by this restriction; they remain under their own licenses
-(see above).
+The bundled third-party components remain under their own licenses (see above).
 
 ---
 

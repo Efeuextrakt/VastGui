@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### License
+- VastGui is now licensed under the MIT License (see `LICENSE.md`), replacing the PolyForm Noncommercial
+  License 1.0.0. Commercial use is now permitted. Bundled third-party components keep their own licenses.
+
 ### Build
 - Windows releases are now built with the MSYS2 **UCRT64** toolchain (MinGW-w64 GCC targeting the Universal C
   Runtime) instead of the deprecated MINGW64 one. `VastGui.exe` imports the system UCRT (`api-ms-win-crt-*.dll`,

@@ -1,7 +1,7 @@
 VastGui - third-party notices
 =============================
 
-VastGui itself is licensed under the PolyForm Noncommercial License 1.0.0 (see LICENSE.md).
+VastGui itself is licensed under the MIT License (see LICENSE.md).
 That license applies only to VastGui's own code. The components below are compiled into
 VastGui.exe and remain under their own (permissive) licenses, reproduced in full here.
 

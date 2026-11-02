@@ -59,7 +59,7 @@ $($section.Groups[1].Value.Trim())
 
 SHA-256: ``$hash``
 
-VastGui is free for non-commercial use (PolyForm Noncommercial 1.0.0, see ``LICENSE.md`` in the zip).
+VastGui is licensed under the MIT License (see ``LICENSE.md`` in the zip).
 "@
 Set-Content -Path (Join-Path $out "RELEASE_NOTES-$version.md") -Value $notes -Encoding utf8
 

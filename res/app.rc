@@ -24,7 +24,7 @@ BEGIN
             VALUE "FileDescription", "VastGui - desktop client for vast.ai"
             VALUE "FileVersion", VASTGUI_VERSION_STR
             VALUE "InternalName", "VastGui"
-            VALUE "LegalCopyright", "Copyright (c) 2026 Efeuextrakt. PolyForm Noncommercial 1.0.0 - no commercial use. Third-party: see THIRD_PARTY_LICENSES.txt"
+            VALUE "LegalCopyright", "Copyright (c) 2026 Efeuextrakt. MIT License. Third-party: see THIRD_PARTY_LICENSES.txt"
             VALUE "OriginalFilename", "VastGui.exe"
             VALUE "ProductName", "VastGui"
             VALUE "ProductVersion", VASTGUI_VERSION_STR
