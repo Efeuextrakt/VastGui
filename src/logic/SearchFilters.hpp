@@ -95,6 +95,7 @@ struct SortOption {
 [[nodiscard]] const SortOption& sortOption(SortKey k);
 [[nodiscard]] std::optional<SortKey> sortKeyFromId(std::string_view id);
 
+// Built-in GPU model list, used only until vast.ai's /gpu_types/ list has been loaded once (see GpuCatalog).
 [[nodiscard]] std::span<const char* const> knownGpuModels();
 
 struct SearchFilters {

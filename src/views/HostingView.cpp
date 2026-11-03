@@ -71,7 +71,7 @@ void HostingView::draw(App& app) {
     }
 
     const Settings& st = app.settings();
-    const ImGuiTableFlags flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_Hideable | ImGuiTableFlags_RowBg |
+    const ImGuiTableFlags flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_Hideable | ImGuiTableFlags_RowBg | ImGuiTableFlags_PadOuterX |
                                   ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY |
                                   ImGuiTableFlags_SizingFixedFit;
     if (ImGui::BeginTable("##machines", 13, flags)) {
@@ -86,7 +86,7 @@ void HostingView::draw(App& app) {
             ImGui::TableNextRow();
             ImGui::PushID(static_cast<int>(m.id));
             ImGui::TableNextColumn();
-            ImGui::Selectable(std::to_string(m.id).c_str(), false, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap);
+            ui::TableRowSelectable(std::to_string(m.id).c_str(), false);
             if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) open(Dialog::Json, m);
             ImGui::TableNextColumn();
             ImGui::TextUnformatted(m.hostname.c_str());

@@ -73,6 +73,8 @@ struct Settings {
     bool sidebarCollapsed = false;
     bool showActivityLog = true;
     float apiKeysSplit = 0.58f;  // Keys > API keys: list width / page width
+    // GPU model names from vast.ai's /gpu_types/ (cached for offline starts; refreshed once per start).
+    std::vector<std::string> gpuModels;
 };
 
 void to_json(json& j, const Settings& s);

@@ -81,8 +81,8 @@ constexpr bool sortOrdered() {
 static_assert(sortOrdered(), "kSortOptions must be ordered by SortKey");
 
 constexpr const char* kGpuModels[] = {
-    "RTX 5090",       "RTX 5080",       "RTX 5070 Ti",    "RTX 5070",     "RTX 5060 Ti",
-    "RTX 4090",       "RTX 4080S",      "RTX 4080",       "RTX 4070S Ti", "RTX 4070S",
+    "RTX 5090",       "RTX 5090D",      "RTX 5080",       "RTX 5070 Ti",  "RTX 5070",       "RTX 5060 Ti",
+    "RTX 4090",       "RTX 4090D",      "RTX 4080S",      "RTX 4080",     "RTX 4070S Ti",   "RTX 4070S",
     "RTX 4070 Ti",    "RTX 4070",       "RTX 4060 Ti",    "RTX 4060",     "RTX 3090 Ti",
     "RTX 3090",       "RTX 3080 Ti",    "RTX 3080",       "RTX 3070 Ti",  "RTX 3070",
     "RTX 3060 Ti",    "RTX 3060",       "RTX 2080 Ti",    "RTX PRO 6000 WS", "RTX PRO 6000 S",

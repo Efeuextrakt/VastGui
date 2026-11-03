@@ -6,7 +6,9 @@
 
 ## Search (main page)
 
-- #GPUs toggles, rental type (on-demand / interruptible / reserved), multi-select GPU model picker with search,
+- #GPUs toggles, rental type (on-demand / interruptible / reserved), multi-select GPU model picker with search
+  (the vast.ai console's model list from `/api/v0/gpu_types/`, grouped by family - RTX 5000/4000/3000/2000 Series,
+  GTX, Titan, RTX PRO / Ada / A, Quadro, Data Center, AMD Instinct / Radeon, Other - and sorted by model and variant),
   region (planet / continent / country), sort (price, TFLOPS/$/hr, DLP/$/hr, reliability, inet, disk bandwidth,
   duration, VRAM, CUDA) with asc/desc, card view or a sortable, resizable, reorderable, hideable table.
 - Filter panel with template box (change/edit template), secure cloud, disk size + volume, reliability,

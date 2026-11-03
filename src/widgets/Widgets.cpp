@@ -121,6 +121,160 @@ bool ToggleButton(const char* label, bool active, const ImVec2& size) {
     return SecondaryButton(label, size);
 }
 
+namespace {
+
+// A text-line-high list row that looks and behaves like ImGui::Selectable: it spans the available width, reacts
+// to the mouse on the row extended by half the item spacing on each side (no dead gap between rows) and draws the
+// same rounded hover highlight. Used by the GPU picker's checkboxes and group headers so every dropdown row
+// highlights identically.
+struct ListRow {
+    ImVec2 pos;  // top-left of the text line
+    bool visible = false;
+    bool hovered = false;
+    bool clicked = false;
+};
+
+ListRow listRow(const char* strId, float contentWidth) {
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    const ImGuiStyle& style = ImGui::GetStyle();
+    ListRow r;
+    r.pos = window->DC.CursorPos;
+    const float h = ImGui::GetTextLineHeight();
+    ImGui::ItemSize(ImVec2(contentWidth, h), 0.0f);
+    // Same box as Selectable(): row from the cursor to the work rect's right edge, padded by half the spacing.
+    ImRect bb(r.pos.x, r.pos.y, std::max(window->WorkRect.Max.x, r.pos.x + contentWidth), r.pos.y + h);
+    const float spacingL = IM_TRUNC(style.ItemSpacing.x * 0.5f);
+    const float spacingU = IM_TRUNC(style.ItemSpacing.y * 0.5f);
+    bb.Min.x -= spacingL;
+    bb.Min.y -= spacingU;
+    bb.Max.x += style.ItemSpacing.x - spacingL;
+    bb.Max.y += style.ItemSpacing.y - spacingU;
+    const ImGuiID id = window->GetID(strId);
+    if (!ImGui::ItemAdd(bb, id)) return r;
+    r.visible = true;
+    bool held = false;
+    r.clicked = ImGui::ButtonBehavior(bb, id, &r.hovered, &held);
+    if (r.hovered) {
+        window->DrawList->AddRectFilled(bb.Min, bb.Max, ImGui::GetColorU32(held ? ImGuiCol_HeaderActive : ImGuiCol_HeaderHovered),
+                                        style.SelectableRounding);
+    }
+    return r;
+}
+
+}  // namespace
+
+bool SmallCheckbox(const char* label, bool* v) {
+    const Palette& p = palette();
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const float box = std::floor(ImGui::GetFontSize() * 0.77f);
+    const char* end = ImGui::FindRenderedTextEnd(label);
+    const float gap = style.ItemInnerSpacing.x;
+    const ListRow row = listRow(label, box + gap + ImGui::CalcTextSize(label, end).x);
+    if (!row.visible) return false;
+    if (row.clicked) *v = !*v;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    // Centre the box on the capital letters (cap height ~ 0.7 em) rather than on the full line height, which
+    // includes room for descenders the GPU names do not use.
+    const float capCentre = row.pos.y + ImGui::GetFontBaked()->Ascent - ImGui::GetFontSize() * 0.35f;
+    const ImVec2 a(row.pos.x, std::round(capCentre - box * 0.5f));
+    const ImVec2 b(a.x + box, a.y + box);
+    const float rounding = std::max(1.0f, box * 0.2f);
+    if (*v) {
+        dl->AddRectFilled(a, b, col(p.accent), rounding);
+        const float t = std::max(1.0f, box * 0.14f);
+        const ImVec2 c1(a.x + box * 0.22f, a.y + box * 0.52f), c2(a.x + box * 0.42f, a.y + box * 0.72f),
+            c3(a.x + box * 0.78f, a.y + box * 0.28f);
+        dl->AddLine(c1, c2, IM_COL32_WHITE, t);
+        dl->AddLine(c2, c3, IM_COL32_WHITE, t);
+    } else {
+        dl->AddRectFilled(a, b, col(p.frame), rounding);
+        dl->AddRect(a, b, col(row.hovered ? p.accent : p.border), rounding);
+    }
+    dl->AddText(ImVec2(b.x + gap, row.pos.y), col(p.text), label, end);
+    return row.clicked;
+}
+
+bool GroupHeader(const char* strId, const char* label, bool forceOpen) {
+    const ImGuiStyle& style = ImGui::GetStyle();
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    const ImGuiID key = ImGui::GetID(strId);
+    bool open = storage->GetBool(key, false);
+    // Arrow and text placed like an unframed tree node, so the look matches the rest of the UI.
+    const float textX = ImGui::GetFontSize() + style.FramePadding.x * 2.0f;
+    const char* end = ImGui::FindRenderedTextEnd(label);
+    const ListRow row = listRow(strId, textX + ImGui::CalcTextSize(label, end).x);
+    if (row.clicked && !forceOpen) {
+        open = !open;
+        storage->SetBool(key, open);
+    }
+    const bool shown = open || forceOpen;
+    if (row.visible) {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const float f = ImGui::GetFontSize();
+        ImGui::RenderArrow(dl, ImVec2(row.pos.x + style.FramePadding.x + f * 0.15f, row.pos.y + f * 0.15f),
+                           ImGui::GetColorU32(ImGuiCol_Text), shown ? ImGuiDir_Down : ImGuiDir_Right, 0.70f);
+        dl->AddText(ImVec2(row.pos.x + textX, row.pos.y), ImGui::GetColorU32(ImGuiCol_Text), label, end);
+    }
+    return shown;
+}
+
+bool TableRowSelectable(const char* label, bool selected) {
+    ImGuiTable* table = ImGui::GetCurrentTable();
+    const ImGuiStyle& style = ImGui::GetStyle();
+    // The Selectable only handles input; its own highlight (text-high) is made invisible.
+    constexpr ImU32 kClear = IM_COL32(0, 0, 0, 0);
+    ImGui::PushStyleColor(ImGuiCol_Header, kClear);
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, kClear);
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive, kClear);
+    bool clicked = ImGui::Selectable(label, selected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap);
+    const bool itemActive = ImGui::IsItemActive();
+    const ImGuiID rowKey = ImGui::GetItemID();
+    ImGui::PopStyleColor(3);
+    if (!table) return clicked;
+
+    // Row heights are only final when the row ends, so the highlight uses the height measured last frame: each
+    // call records where its row starts, and the next call (next row of the same table) stores that row's height.
+    struct Pending {
+        ImGuiID table = 0;
+        int frame = -1;
+        ImGuiID row = 0;
+        float y1 = 0.0f;
+    };
+    static Pending pending;
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    const int frame = ImGui::GetFrameCount();
+    if (pending.table == table->ID && pending.frame == frame && table->RowPosY1 > pending.y1) {
+        const float h = table->RowPosY1 - pending.y1;
+        storage->SetFloat(pending.row, h);
+        storage->SetFloat(table->ID, h);  // fallback for rows not measured yet (e.g. the last one)
+    }
+    pending = {table->ID, frame, rowKey, table->RowPosY1};
+
+    // Hover of the whole row (as tracked by the table, last frame) so the whole row reacts.
+    const bool rowHovered = ImGui::TableGetHoveredRow() == ImGui::TableGetRowIndex();
+    // Clicks on the row outside the Selectable's text-high box (rows with buttons/badges are taller) count too.
+    if (!clicked && rowHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsAnyItemHovered() &&
+        !ImGui::IsAnyItemActive() && ImGui::IsWindowHovered()) {
+        clicked = true;
+    }
+    if (rowHovered || selected) {
+        const ImGuiCol c = rowHovered ? ((itemActive || ImGui::IsMouseDown(ImGuiMouseButton_Left)) ? ImGuiCol_HeaderActive
+                                                                                                  : ImGuiCol_HeaderHovered)
+                                      : ImGuiCol_Header;
+        const float fallback = storage->GetFloat(table->ID, ImGui::GetTextLineHeight() + style.CellPadding.y * 2.0f);
+        const float h = storage->GetFloat(rowKey, fallback);
+        // Full row height, slightly inset so neighbouring highlights stay apart; rounded like dropdown rows.
+        const float insetX = std::floor(style.CellPadding.x * 0.5f);
+        const ImRect& clip = table->BgClipRect;
+        const ImVec2 a(clip.Min.x + insetX, table->RowPosY1 + 1.0f);
+        const ImVec2 b(clip.Max.x - insetX, table->RowPosY1 + h - 1.0f);
+        ImGui::TablePushBackgroundChannel();  // behind the cell contents
+        ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImGui::GetColorU32(c), style.SelectableRounding);
+        ImGui::TablePopBackgroundChannel();
+    }
+    return clicked;
+}
+
 bool ToggleSwitch(const char* label, bool* v) {
     const Palette& p = palette();
     const float h = ImGui::GetFrameHeight() * 0.72f;
@@ -462,7 +616,7 @@ std::optional<int> JsonTable(const char* id, const json& rows, JsonTableState& s
 
     const int ncols = static_cast<int>(std::max<std::size_t>(1, state.columns.size()));
     const ImGuiTableFlags flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable |
-                                  ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
+                                  ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_PadOuterX | ImGuiTableFlags_BordersInnerV |
                                   ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit;
     const float height = opts.height > 0 ? opts.height : ImGui::GetContentRegionAvail().y;
     // A separate table ID while empty: initial column widths are only applied when a table is
@@ -523,8 +677,7 @@ std::optional<int> JsonTable(const char* id, const json& rows, JsonTableState& s
                     }
                     if (c == 0) {
                         const bool sel = state.selected == idx;
-                        if (ImGui::Selectable(text.empty() ? "##row" : text.c_str(), sel,
-                                              ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
+                        if (ui::TableRowSelectable(text.empty() ? "##row" : text.c_str(), sel)) {
                             state.selected = idx;
                         }
                         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) activated = idx;

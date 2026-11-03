@@ -110,6 +110,9 @@ void applyTheme(const std::string& theme, const std::array<float, 3>& accentRgb,
     style.WindowRounding = 6.0f;
     style.ChildRounding = 6.0f;
     style.FrameRounding = 5.0f;
+    // List rows in dropdowns, context menus and the GPU picker share the button/field rounding.
+    style.SelectableRounding = style.FrameRounding;
+    style.MenuItemRounding = style.FrameRounding;
     style.PopupRounding = 6.0f;
     style.GrabRounding = 5.0f;
     style.TabRounding = 5.0f;

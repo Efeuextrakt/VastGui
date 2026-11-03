@@ -1,6 +1,19 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 - 2026-11-03
+
+### Search
+- The GPU model picker now uses the same list as the vast.ai web console (`GET /api/v0/gpu_types/?status=active`,
+  157 models incl. RTX 4090D and RTX 5090D) instead of a built-in list. Names keep vast.ai's spelling but are
+  grouped and sorted by family, model and variant (e.g. RTX 4090 Ti, RTX 4090, RTX 4090D together in
+  "RTX 4000 Series"); groups are collapsible and open while searching, with compact checkboxes. The list is cached
+  in `VastGui.json` for offline starts.
+
+### UI
+- One hover / selection highlight everywhere: dropdown rows, context menus and the GPU picker's groups and models
+  use the same rounded highlight; table rows (Instances, Search table, Templates, Keys, Hosting, ...) highlight the
+  full row height with rounded corners, and a click anywhere on a row selects it.
+- Tables have the same cell margin on the first column as on the others.
 
 ### License
 - VastGui is now licensed under the MIT License (see `LICENSE.md`), replacing the PolyForm Noncommercial

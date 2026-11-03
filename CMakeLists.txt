@@ -5,7 +5,7 @@
 #   cmake --build build/cmake
 #   ctest --test-dir build/cmake
 cmake_minimum_required(VERSION 3.20)
-project(VastGui VERSION 1.1.0 LANGUAGES CXX)
+project(VastGui VERSION 1.2.0 LANGUAGES CXX)
 if(WIN32)
     enable_language(RC)
 endif()
@@ -49,7 +49,7 @@ target_compile_options(vastgui_crypto PRIVATE $<IF:$<CXX_COMPILER_ID:MSVC>,/W0,-
 
 add_library(vastgui_core STATIC
     src/logic/QueryBuilder.cpp src/logic/SearchFilters.cpp src/logic/Metrics.cpp src/logic/DefectFilter.cpp
-    src/logic/Regions.cpp src/logic/Format.cpp src/logic/DockerOptions.cpp
+    src/logic/Regions.cpp src/logic/Format.cpp src/logic/DockerOptions.cpp src/logic/GpuCatalog.cpp
     src/backend/Commands.cpp src/backend/RestBackend.cpp src/backend/Http.cpp
     src/backend/ApiKey.cpp src/backend/VastClient.cpp src/Platform.cpp src/Log.cpp
     src/SecretBox.cpp)
@@ -95,7 +95,8 @@ endif()
 
 # ---- tests ------------------------------------------------------------------------
 add_executable(VastGuiTests tests/tests_main.cpp tests/test_query_builder.cpp tests/test_metrics.cpp
-                            tests/test_defect_filter.cpp tests/test_backend.cpp tests/test_security.cpp src/Config.cpp)
+                            tests/test_defect_filter.cpp tests/test_backend.cpp tests/test_security.cpp
+                            tests/test_gpu_catalog.cpp src/Config.cpp)
 target_link_libraries(VastGuiTests PRIVATE vastgui_core)
 if(MINGW)
     target_link_options(VastGuiTests PRIVATE -static -static-libgcc -static-libstdc++)

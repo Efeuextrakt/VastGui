@@ -1,6 +1,7 @@
 #pragma once
 
 #include "logic/DefectFilter.hpp"
+#include "logic/GpuCatalog.hpp"
 #include "logic/Metrics.hpp"
 #include "model/Offer.hpp"
 #include "model/Template.hpp"
@@ -10,6 +11,7 @@
 
 #include <array>
 #include <cstdint>
+#include <map>
 #include <set>
 #include <string>
 #include <utility>
@@ -103,6 +105,13 @@ private:
     bool pendingSearch_ = false;
     bool filterPanelOpen_ = true;
     std::string gpuFilterText_;
+    // GPU dropdown: model list from vast.ai (/gpu_types/, cached in Settings::gpuModels), grouped and sorted.
+    void requestGpuTypes(App& app);
+    void rebuildGpuCatalog(App& app);
+    bool gpuTypesRequested_ = false;
+    bool gpuCatalogDirty_ = true;
+    std::vector<GpuGroup> gpuCatalog_;
+    std::map<std::string, std::string> gpuSearchNames_;  // vast name -> normalised name (search matches both)
     std::string regionFilterText_;
 
     RentState rent_;

@@ -23,6 +23,7 @@ using Id = std::int64_t;
 
 // Offers
 [[nodiscard]] ApiCall searchOffers(const SearchFilters& filters);
+[[nodiscard]] ApiCall showGpuTypes();  // GPU models for the GPU selector (GET /gpu_types/?status=active)
 
 // Instances
 [[nodiscard]] ApiCall showInstances();

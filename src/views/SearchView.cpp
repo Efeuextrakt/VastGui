@@ -384,7 +384,42 @@ void SearchView::openRent(App& app, const Offer& o) {
 
 // ---------------------------------------------------------------------------
 
+void SearchView::requestGpuTypes(App& app) {
+    gpuTypesRequested_ = true;
+    ApiCall c = cmd::showGpuTypes();
+    c.quiet = true;  // background refresh; failures still reach the activity log
+    app.client().submit(std::move(c), [this, &app](const ApiResult& r) {
+        if (!r.ok) return;  // keep the cached / built-in list
+        auto names = gpuNamesFromTypes(r.data);
+        if (names.empty()) return;
+        std::sort(names.begin(), names.end());
+        if (names != app.settings().gpuModels) {
+            app.settings().gpuModels = std::move(names);
+            app.markSettingsDirty();
+        }
+        gpuCatalogDirty_ = true;
+    });
+}
+
+void SearchView::rebuildGpuCatalog(App& app) {
+    const Settings& st = app.settings();
+    std::vector<std::string> names = st.gpuModels;
+    if (names.empty()) names.assign(knownGpuModels().begin(), knownGpuModels().end());
+    // Models that are in the results or selected but missing from the list (new or renamed) are shown too.
+    for (const auto& o : offers_) {
+        if (!o.gpuName.empty()) names.push_back(o.gpuName);
+    }
+    names.insert(names.end(), st.filters.gpuModels.begin(), st.filters.gpuModels.end());
+    gpuCatalog_ = buildGpuCatalog(names);
+    gpuSearchNames_.clear();
+    for (const auto& g : gpuCatalog_) {
+        for (const auto& m : g.models) gpuSearchNames_[m] = normaliseGpuName(m);
+    }
+    gpuCatalogDirty_ = false;
+}
+
 void SearchView::draw(App& app) {
+    if (!gpuTypesRequested_) requestGpuTypes(app);
     // The limit is a setting (not part of saved filters/presets); keep the filters in sync so searches use it.
     app.settings().filters.limit = app.settings().searchLimit;
     // Re-filter when the set of machines with own instances changes (instances refresh in the background).
@@ -489,32 +524,50 @@ void SearchView::drawTopBar(App& app) {
         ImGui::SetNextItemWidth(-FLT_MIN);
         if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
         ImGui::InputTextWithHint("##gpufilter", ICON_FA_MAGNIFYING_GLASS " Search GPU models", &gpuFilterText_);
-        if (!f.gpuModels.empty() && ui::SecondaryButton(ICON_FA_XMARK " Clear selection")) {
+        // Always present (disabled when empty) so selecting the first model does not shift the list.
+        ImGui::BeginDisabled(f.gpuModels.empty());
+        if (ui::SecondaryButton(ICON_FA_XMARK " Clear selection")) {
             f.gpuModels.clear();
             filtersChanged(app);
         }
-        std::vector<std::string> models(knownGpuModels().begin(), knownGpuModels().end());
-        for (const auto& o : offers_) {
-            if (!o.gpuName.empty() && std::find(models.begin(), models.end(), o.gpuName) == models.end()) {
-                models.push_back(o.gpuName);
-            }
-        }
-        for (const auto& m : f.gpuModels) {
-            if (std::find(models.begin(), models.end(), m) == models.end()) models.push_back(m);
-        }
-        for (const auto& m : models) {
-            if (!fmt::containsCi(m, gpuFilterText_)) continue;
-            auto it = std::find(f.gpuModels.begin(), f.gpuModels.end(), m);
-            bool selected = it != f.gpuModels.end();
-            if (ImGui::Checkbox(m.c_str(), &selected)) {
-                if (selected) {
-                    f.gpuModels.push_back(m);
-                } else {
-                    f.gpuModels.erase(it);
+        ImGui::EndDisabled();
+        if (ImGui::IsWindowAppearing() || gpuCatalogDirty_) rebuildGpuCatalog(app);
+        // Groups start collapsed; while searching, every group with a match is shown open (without changing the
+        // user's own open/closed state).
+        const std::string query = fmt::trim(gpuFilterText_);
+        const bool searching = !query.empty();
+        int shownGroups = 0;
+        for (const auto& g : gpuCatalog_) {
+            std::vector<const std::string*> visible;
+            int selectedCount = 0;
+            for (const auto& m : g.models) {
+                const bool sel = std::find(f.gpuModels.begin(), f.gpuModels.end(), m) != f.gpuModels.end();
+                if (sel) ++selectedCount;
+                if (!searching || fmt::containsCi(m, query) || fmt::containsCi(gpuSearchNames_[m], query)) {
+                    visible.push_back(&m);
                 }
-                filtersChanged(app);
+            }
+            if (visible.empty()) continue;
+            ++shownGroups;
+            const std::string header = selectedCount > 0 ? std::format("{}  ({} selected)", g.name, selectedCount) : g.name;
+            if (ui::GroupHeader(("##gpug_" + g.name).c_str(), header.c_str(), searching)) {
+                ImGui::Indent();
+                for (const std::string* m : visible) {
+                    auto it = std::find(f.gpuModels.begin(), f.gpuModels.end(), *m);
+                    bool selected = it != f.gpuModels.end();
+                    if (ui::SmallCheckbox(m->c_str(), &selected)) {
+                        if (selected) {
+                            f.gpuModels.push_back(*m);
+                        } else {
+                            f.gpuModels.erase(it);
+                        }
+                        filtersChanged(app);
+                    }
+                }
+                ImGui::Unindent();
             }
         }
+        if (shownGroups == 0) ui::TextDim("No GPU model matches.");
         ImGui::EndCombo();
     }
 
@@ -917,7 +970,7 @@ void SearchView::drawCards(App& app) {
 void SearchView::drawTable(App& app) {
     Settings& st = app.settings();
     const ImGuiTableFlags flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable |
-                                  ImGuiTableFlags_Sortable | ImGuiTableFlags_SortTristate | ImGuiTableFlags_RowBg |
+                                  ImGuiTableFlags_Sortable | ImGuiTableFlags_SortTristate | ImGuiTableFlags_RowBg | ImGuiTableFlags_PadOuterX |
                                   ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY |
                                   ImGuiTableFlags_SizingFixedFit;
     if (!ImGui::BeginTable("##offertable", ColCount, flags)) return;
@@ -1012,8 +1065,7 @@ void SearchView::drawTable(App& app) {
             for (int c = 0; c < ColCount; ++c) {
                 if (!ImGui::TableSetColumnIndex(c)) continue;
                 if (c == ColId) {
-                    ImGui::Selectable(textCell(c, o, m, st.currency).c_str(), false,
-                                      ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap);
+                    ui::TableRowSelectable(textCell(c, o, m, st.currency).c_str(), false);
                     if (ImGui::BeginPopupContextItem("##rowctx")) {
                         if (auto a = ui::OfferContextMenuItems(o); a != ui::OfferAction::None) pending = std::pair{a, idx};
                         ImGui::EndPopup();

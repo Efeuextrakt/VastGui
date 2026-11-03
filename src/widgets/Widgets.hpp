@@ -23,6 +23,16 @@ bool SecondaryButton(const char* label, const ImVec2& size = ImVec2(0, 0));
 bool DangerButton(const char* label, const ImVec2& size = ImVec2(0, 0));
 bool ToggleButton(const char* label, bool active, const ImVec2& size = ImVec2(0, 0));
 bool ToggleSwitch(const char* label, bool* v);
+// Checkbox with a box about the size of a tree node's arrow (for dense lists, e.g. the GPU picker).
+bool SmallCheckbox(const char* label, bool* v);
+// Collapsible group header for dropdown lists (arrow + label, same hover highlight as list rows). The open state
+// is kept per window under strId; forceOpen shows it open without changing that state. Returns whether it is open
+// (the caller indents its rows itself).
+bool GroupHeader(const char* strId, const char* label, bool forceOpen = false);
+// Row selector for tables: call in the row's first cell instead of Selectable(SpanAllColumns). The hover / selected
+// highlight covers the whole row (full height, rounded corners, drawn behind the cells), and a click anywhere on
+// the row counts. IsItemHovered() / BeginPopupContextItem() afterwards refer to the row.
+bool TableRowSelectable(const char* label, bool selected);
 void HelpMarker(const char* text);
 // Visible vertical drag separator between two side-by-side panels. Updates *leftWidth while dragging
 // (clamped to [minLeft, maxLeft]); returns true on the frame the drag ends.

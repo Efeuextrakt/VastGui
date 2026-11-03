@@ -148,6 +148,12 @@ ApiCall searchOffers(const SearchFilters& filters) {
     }
 }
 
+ApiCall showGpuTypes() {
+    // The GPU model list of the web console's GPU selector; public, works without an API key.
+    return make("Load GPU models", extract(rest(HttpMethod::Get, "/gpu_types/", std::nullopt, {{"status", "active"}}), "gpu_types"),
+                30);
+}
+
 // ---- Instances -------------------------------------------------------------
 
 ApiCall showInstances() {

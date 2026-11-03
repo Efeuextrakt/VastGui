@@ -392,7 +392,7 @@ void InstancesView::drawTable(App& app) {
     }
 
     const ImGuiTableFlags flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable |
-                                  ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
+                                  ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_PadOuterX | ImGuiTableFlags_BordersInnerV |
                                   ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit;
     // New table id whenever saved widths/order must not apply: imgui.ini stores them per column index (V4: wider
     // Status column for the console status labels such as "scheduling").
@@ -500,8 +500,7 @@ void InstancesView::drawTable(App& app) {
                     break;
                 }
                 case ICId:
-                    ImGui::Selectable(std::to_string(i.id).c_str(), selected_.contains(i.id),
-                                      ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap);
+                    ui::TableRowSelectable(std::to_string(i.id).c_str(), selected_.contains(i.id));
                     if (ImGui::BeginPopupContextItem("##instctx")) {
                         drawRowMenu(app, i);
                         ImGui::EndPopup();
