@@ -209,13 +209,13 @@ void App::refreshInstances(bool quiet) {
         instancesFetchedAt_ = ImGui::GetTime();
         const double now = fmt::nowEpoch();
         for (const auto& inst : instances_) {
-            if (!inst.dphTotal) continue;
+            if (!inst.costNowHr) continue;
             auto it = std::find_if(costHistory_.begin(), costHistory_.end(), [&](const auto& e) { return e.first == inst.id; });
             if (it == costHistory_.end()) {
                 costHistory_.push_back({inst.id, {}});
                 it = std::prev(costHistory_.end());
             }
-            const double rate = inst.status() == "running" ? *inst.dphTotal : 0.0;
+            const double rate = *inst.costNowHr;
             it->second.emplace_back(now, rate);
             if (it->second.size() > 720) it->second.erase(it->second.begin());
         }

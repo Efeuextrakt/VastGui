@@ -47,6 +47,13 @@ struct Offer {
     std::optional<double> score;
     std::optional<double> gpuCostPerHour;
     std::optional<double> diskCostPerHour;
+    std::optional<double> discountedPerHour;  // search.discountedTotalPerHour (GPU + disk, after vast.ai's discounts)
+    std::optional<double> slaPremiumPerHour;
+    double bidMarkupPerHour = 0.0;            // interruptible only: the console's suggested bid is min bid + 5 %
+    std::optional<double> availVolDph;        // $/GB/hr of a new local volume on this machine
+    double volumePerHour = 0.0;               // cost of the new volume the user plans to create (Search panel)
+    // Price as the vast.ai console shows it: discounted total + SLA premium (+ bid markup). Bandwidth is extra.
+    std::optional<double> priceHr;
 
     std::string cpuName;
     std::string moboName;
@@ -127,7 +134,12 @@ inline void from_json(const json& j, Offer& o) {
     if (const json* s = find(j, "search")) {
         o.gpuCostPerHour = optDouble(*s, "gpuCostPerHour");
         o.diskCostPerHour = optDouble(*s, "diskHour");
+        o.discountedPerHour = optDouble(*s, "discountedTotalPerHour");
+        o.slaPremiumPerHour = optDouble(*s, "slaPremiumPerHour");
     }
+    o.priceHr = o.discountedPerHour ? o.discountedPerHour : o.dphTotal;
+    if (o.priceHr && o.slaPremiumPerHour) *o.priceHr += *o.slaPremiumPerHour;
+    o.availVolDph = optDouble(j, "avail_vol_dph");
     o.cpuName = str(j, "cpu_name");
     o.moboName = str(j, "mobo_name");
     o.diskName = str(j, "disk_name");
@@ -145,6 +157,23 @@ inline void from_json(const json& j, Offer& o) {
     o.rented = optBool(j, "rented").value_or(false);
     o.datacenter = optInt(j, "hosting_type").value_or(0) == 1 || optBool(j, "datacenter").value_or(false);
     o.raw = j;
+}
+
+// For interruptible searches: dph_total holds the minimum bid; the console prices offers at its suggested bid,
+// which is 5 % above the minimum GPU price.
+inline void applyBidMarkup(Offer& o) {
+    if (o.bidMarkupPerHour > 0.0 || !o.priceHr) return;
+    const double gpu = o.gpuCostPerHour.value_or(o.minBid.value_or(0.0));
+    o.bidMarkupPerHour = gpu * 0.05;
+    *o.priceHr += o.bidMarkupPerHour;
+}
+
+// Like the console, a new local volume created with the rental is part of the shown price.
+inline void setNewVolumeCost(Offer& o, double volumeGb) {
+    if (!o.priceHr) return;
+    *o.priceHr -= o.volumePerHour;
+    o.volumePerHour = o.availVolDph && volumeGb > 0.0 ? volumeGb * *o.availVolDph : 0.0;
+    *o.priceHr += o.volumePerHour;
 }
 
 }  // namespace vast

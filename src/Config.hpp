@@ -66,6 +66,12 @@ struct Settings {
     Blacklist blacklist;
     Template currentTemplate = Template::defaultTemplate();
     bool cardView = true;
+    bool templateCardView = true;
+    std::string templateSort = "name";  // template cards: "name" or "date"
+    bool templateSortDesc = false;
+    bool instanceCardView = true;
+    std::string instanceSort = "label";  // instance cards: label, id, status, gpu, price, uptime
+    bool instanceSortDesc = false;
     std::vector<bool> offerColumns;
     std::vector<bool> instanceColumns;
 

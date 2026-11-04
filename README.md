@@ -32,7 +32,7 @@ price per performance and want to manage a fleet of instances from one window:
 - **Price per performance at a glance.** TFLOPS/$/hr and DLP/$/hr for every offer and instance, colour-coded from
   best to worst.
 - **Bad machines filtered out.** Low reliability, missing specs, performance far below the GPU model's median or
-  machines you blacklisted are hidden (or greyed out) automatically.
+  machines you blacklisted are hidden (or shown with a *defective* tag) automatically.
 - **One small exe.** A single ~5 MB `VastGui.exe` - no installer, no runtime, no Python. Starts instantly, never
   blocks while requests run.
 
@@ -95,6 +95,7 @@ Details: [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
 ```bat
 build.bat          :: release build -> VastGui.exe   (MinGW-w64 g++ 13+, CMake, Ninja)
+build.bat run      :: build, then launch VastGui.exe
 build.bat test     :: build and run the unit tests
 ```
 

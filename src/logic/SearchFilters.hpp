@@ -3,6 +3,7 @@
 
 #include "model/Json.hpp"
 
+#include <algorithm>
 #include <array>
 #include <optional>
 #include <span>
@@ -120,6 +121,7 @@ struct SearchFilters {
     std::string minDriver;
     std::string minUbuntu;
     std::optional<double> templateMinCuda;     // derived from the selected template (image tag, extra_filters)
+    std::optional<double> templateDiskGb;      // runtime only: the selected template's recommended disk space
     json templateRequirements = json::object();  // runtime only: template extra_filters + image CUDA, REST query format
 
     std::array<Range, kRangeFieldCount> ranges{};
@@ -128,6 +130,8 @@ struct SearchFilters {
 
     bool hideDefective = true;
 
+    // Disk size the offers are priced for: like the console, at least the template's recommended disk space.
+    [[nodiscard]] double effectiveDiskGb() const { return std::max(diskGb, templateDiskGb.value_or(0.0)); }
     [[nodiscard]] Range& range(RangeField f) { return ranges[static_cast<std::size_t>(f)]; }
     [[nodiscard]] const Range& range(RangeField f) const { return ranges[static_cast<std::size_t>(f)]; }
     bool operator==(const SearchFilters&) const = default;

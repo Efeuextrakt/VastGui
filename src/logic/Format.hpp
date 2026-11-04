@@ -26,6 +26,7 @@ namespace fmt {
 [[nodiscard]] std::string fixed(std::optional<double> v, int decimals, std::string_view suffix = {});
 [[nodiscard]] std::string percent(std::optional<double> fraction, int decimals = 1);
 [[nodiscard]] std::string humanDuration(double seconds);
+[[nodiscard]] std::string compactNumber(double v);  // 950, 1.2k, 12k, 3.4M
 [[nodiscard]] std::string dateFromEpoch(double epoch);       // local "YYYY-MM-DD"
 [[nodiscard]] std::string dateTimeFromEpoch(double epoch);   // local "YYYY-MM-DD HH:MM"
 [[nodiscard]] std::optional<double> epochFromDate(std::string_view yyyyMmDd);  // UTC midnight

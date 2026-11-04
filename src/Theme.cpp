@@ -33,6 +33,7 @@ Palette darkPalette(const ImVec4& accent) {
     p.accentHover = scale(accent, 1.18f);
     p.success = rgb(34, 197, 94);
     p.warning = rgb(245, 158, 11);
+    p.caution = rgb(250, 204, 21);
     p.danger = rgb(239, 68, 68);
     p.info = rgb(56, 189, 248);
     p.dark = true;
@@ -54,6 +55,7 @@ Palette lightPalette(const ImVec4& accent) {
     p.accentHover = scale(accent, 0.88f);
     p.success = rgb(22, 163, 74);
     p.warning = rgb(217, 119, 6);
+    p.caution = rgb(202, 138, 4);
     p.danger = rgb(220, 38, 38);
     p.info = rgb(2, 132, 199);
     p.dark = false;
@@ -91,6 +93,13 @@ ImVec4 statusColor(const std::string& s) {
         return p.danger;
     }
     return p.textDim;
+}
+
+ImVec4 verificationColor(const std::string& v) {
+    const Palette& p = g_palette;
+    if (v == "verified") return p.success;
+    if (v == "deverified") return p.warning;
+    return p.caution;
 }
 
 void applyTheme(const std::string& theme, const std::array<float, 3>& accentRgb, float dpiScale, float uiScale,

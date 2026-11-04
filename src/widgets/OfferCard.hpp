@@ -11,11 +11,11 @@ enum class OfferAction { None, Rent, CopyOfferId, CopyMachineId, CopyHostId, Hid
 
 struct OfferCardContext {
     const CurrencyFormat* currency = nullptr;
-    bool greyed = false;          // defective offer shown on request
     bool incompatible = false;    // template needs a newer CUDA than this machine supports
     bool rentedByMe = false;      // the user already has an instance on this machine
     std::string incompatibleWhy;
-    bool interruptible = false;   // show min bid instead of on-demand price
+    bool interruptible = false;   // price is the suggested bid
+    std::optional<double> diskGb;  // disk size the price includes (for the price tooltip)
     float height = 0.0f;
     float* measuredHeight = nullptr;  // receives max(content height) so callers can size cards to fit
 };
@@ -25,7 +25,7 @@ struct OfferCardContext {
 OfferAction OfferCard(const Offer& o, const OfferMetrics& m, const DefectInfo& d, const OfferCardContext& ctx);
 
 // Shared tooltip / context menu bits used by both card and table views.
-void OfferPriceTooltip(const Offer& o, const CurrencyFormat& c);
-OfferAction OfferContextMenuItems(const Offer& o);
+void OfferPriceTooltip(const Offer& o, const CurrencyFormat& c, std::optional<double> diskGb = std::nullopt);
+OfferAction OfferContextMenuItems(const Offer& o, bool canRent = true);
 
 }  // namespace vast::ui

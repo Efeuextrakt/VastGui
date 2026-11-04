@@ -4,6 +4,7 @@
 #
 #   ./build.sh            release build  -> ./VastGui
 #   ./build.sh debug      debug build
+#   ./build.sh run        build, then launch ./VastGui (combinable: debug run)
 #   ./build.sh test       build + run unit tests -> ./VastGuiTests
 #   ./build.sh clean      remove build/ and binaries
 #
@@ -15,7 +16,15 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-MODE="${1:-release}"
+MODE=release
+RUN=0
+for arg in "$@"; do
+    case "$arg" in
+        release|debug|test|clean) MODE="$arg" ;;
+        run) RUN=1 ;;
+        *) echo "ERROR: unknown option '$arg' (release|debug|run|test|clean)"; exit 1 ;;
+    esac
+done
 CXX="${CXX:-g++}"
 JOBS="${JOBS:-$(nproc 2>/dev/null || echo 4)}"
 
@@ -23,6 +32,16 @@ if [[ "$MODE" == "clean" ]]; then
     rm -rf build VastGui VastGuiTests
     echo "Cleaned."
     exit 0
+fi
+
+if (( RUN )); then
+    for pid in $(pgrep -x VastGui || true); do
+        exe="$(readlink "/proc/$pid/exe" 2>/dev/null || true)"
+        if [[ "${exe% (deleted)}" == "$PWD/VastGui" ]]; then
+            echo "ERROR: ./VastGui is running (pid $pid) - close it first."
+            exit 1
+        fi
+    done
 fi
 
 CFG="$MODE"
@@ -80,3 +99,8 @@ echo "[3/3] Linking VastGui"
 $CXX -o VastGui "$OBJ/unity.o" "$OBJ"/tp/*.o -static-libgcc -static-libstdc++ -lglfw -lGL $CURL_LIB -pthread -ldl
 [[ "$CFG" == "release" ]] && strip VastGui
 echo "Built ./VastGui"
+if (( RUN )); then
+    echo "Launching ./VastGui"
+    nohup ./VastGui >/dev/null 2>&1 &
+    disown
+fi

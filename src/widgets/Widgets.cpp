@@ -367,6 +367,18 @@ void TextDim(const char* text) {
     ImGui::PopStyleColor();
 }
 
+std::string Ellipsize(const std::string& s, float maxWidth) {
+    if (ImGui::CalcTextSize(s.c_str()).x <= maxWidth) return s;
+    std::size_t n = s.size();
+    while (n > 0) {
+        --n;
+        while (n > 0 && (static_cast<unsigned char>(s[n]) & 0xC0) == 0x80) --n;  // keep UTF-8 sequences whole
+        std::string t = s.substr(0, n) + "...";
+        if (ImGui::CalcTextSize(t.c_str()).x <= maxWidth) return t;
+    }
+    return "...";
+}
+
 void TextWithColor(const ImVec4& c, const char* text) {
     ImGui::PushStyleColor(ImGuiCol_Text, c);
     ImGui::TextUnformatted(text);

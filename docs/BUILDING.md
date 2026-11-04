@@ -30,6 +30,7 @@ That is the whole build (MinGW-w64, UCRT64). Other modes:
 |-------------------------|--------------------------------------------------------------------|
 | `build.bat`             | release build -> `VastGui.exe`                                     |
 | `build.bat debug`       | debug build (`-O0 -g`)                                             |
+| `build.bat run`         | build, then launch `VastGui.exe` (combinable: `debug run`, `msvc run`); aborts if it is already running |
 | `build.bat test`        | builds and runs the unit tests -> `VastGuiTests.exe`               |
 | `build.bat package`     | release build + tests, then `release\VastGui-<ver>-win64.zip`, release notes |
 | `build.bat clean`       | removes `build\` and the executables                               |
@@ -49,7 +50,7 @@ project root.
    release, with the zip's SHA-256). It stops if the three versions disagree or the changelog has no section for
    the version.
 
-Linux: `./build.sh` (`./build.sh test`, `./build.sh clean`, `./build.sh debug`).
+Linux: `./build.sh` (`./build.sh test`, `./build.sh clean`, `./build.sh debug`, `./build.sh run`).
 
 CMake can also be used directly:
 

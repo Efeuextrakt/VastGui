@@ -14,6 +14,33 @@ TEST_SUITE("Metrics") {
         CHECK(dlpPerDollar(o).value() == doctest::Approx(100.0));
     }
 
+    TEST_CASE("offer price matches the vast.ai console") {
+        // Real interruptible offer: dph_total = min bid + disk; the console adds 5 % of the GPU price (suggested bid).
+        json j = {{"id", 55097271}, {"dph_total", 0.3481}, {"min_bid", 0.3333}, {"avail_vol_dph", 0.0004},
+                  {"search", {{"gpuCostPerHour", 0.3333}, {"diskHour", 0.0148}, {"totalHour", 0.3481},
+                              {"discountedTotalPerHour", 0.3481}}}};
+        Offer o = j.get<Offer>();
+        CHECK(o.priceHr.value() == doctest::Approx(0.3481));
+        applyBidMarkup(o);
+        applyBidMarkup(o);  // idempotent
+        CHECK(o.bidMarkupPerHour == doctest::Approx(0.3333 * 0.05));
+        CHECK(o.priceHr.value() == doctest::Approx(0.3481 + 0.3333 * 0.05));
+        // A new local volume is part of the price; changing its size replaces the old volume cost.
+        setNewVolumeCost(o, 100.0);
+        CHECK(o.priceHr.value() == doctest::Approx(0.3481 + 0.3333 * 0.05 + 0.04));
+        setNewVolumeCost(o, 0.0);
+        CHECK(o.priceHr.value() == doctest::Approx(0.3481 + 0.3333 * 0.05));
+
+        // Discounted total and SLA premium are used when present; per-dollar metrics follow the shown price.
+        j = {{"id", 2}, {"dph_total", 1.0}, {"total_flops", 100.0},
+             {"search", {{"discountedTotalPerHour", 0.8}, {"slaPremiumPerHour", 0.2}}}};
+        o = j.get<Offer>();
+        CHECK(o.priceHr.value() == doctest::Approx(1.0));
+        CHECK(tflopsPerDollar(o).value() == doctest::Approx(100.0));
+        j = {{"id", 3}, {"dph_total", 0.5}};
+        CHECK(j.get<Offer>().priceHr.value() == doctest::Approx(0.5));
+    }
+
     TEST_CASE("real offer fixture") {
         const Offer o = fixtures::offerFrom(fixtures::kHealthyOffer);
         CHECK(o.id == 57147106);
@@ -27,6 +54,7 @@ TEST_SUITE("Metrics") {
         CHECK_FALSE(tflopsPerDollar(o).has_value());  // zero price
         CHECK_FALSE(dlpPerDollar(o).has_value());
         o.dphTotal.reset();
+        o.priceHr.reset();
         CHECK_FALSE(tflopsPerDollar(o).has_value());  // missing price
         CHECK_FALSE(dlpPerDollar(o).has_value());
         o = fixtures::makeOffer(2, "RTX 4090", 1, 0.5, 0.0, 0.0);

@@ -102,7 +102,7 @@ std::optional<double> numericCell(int c, const Offer& o, const OfferMetrics& m) 
         case ColTotalVram: return o.totalVramGb();
         case ColTflops: return o.totalFlops;
         case ColDlperf: return o.dlperf;
-        case ColPrice: return o.dphTotal;
+        case ColPrice: return o.priceHr;
         case ColDlpPerDollar: return m.dlpPerDollar;
         case ColTflopsPerDollar: return m.tflopsPerDollar;
         case ColReliability: return o.reliability;
@@ -131,7 +131,7 @@ std::string textCell(int c, const Offer& o, const OfferMetrics& m, const Currenc
         case ColTotalVram: return formatMetric(o.totalVramGb(), 0);
         case ColTflops: return formatMetric(o.totalFlops, 1);
         case ColDlperf: return formatMetric(o.dlperf, 1);
-        case ColPrice: return fmt::money(o.dphTotal, cur);
+        case ColPrice: return fmt::money(o.priceHr, cur);
         case ColDlpPerDollar: return formatMetric(m.dlpPerDollar, 1);
         case ColTflopsPerDollar: return formatMetric(m.tflopsPerDollar, 1);
         case ColReliability: return fmt::percent(o.reliability, 2);
@@ -219,10 +219,12 @@ void SearchView::search(App& app) {
     for (int i = 0; i < n; ++i) {
         ApiCall c = cmd::searchOffers(f);
         c.quiet = i > 0;  // the console shows the command once
-        c.prepare = [](ApiResult& r) -> std::any {
+        c.prepare = [bid = f.rentalType == RentalType::Interruptible](ApiResult& r) -> std::any {
             auto list = std::make_shared<std::vector<Offer>>();
             for (const auto& j : jsonutil::extractArray(r.data, {"offers"})) {
-                if (j.is_object()) list->push_back(j.get<Offer>());
+                if (!j.is_object()) continue;
+                list->push_back(j.get<Offer>());
+                if (bid) applyBidMarkup(list->back());
             }
             return list;
         };
@@ -262,11 +264,14 @@ void SearchView::updateTemplateRequirements(App& app) {
     const Template& t = app.settings().currentTemplate;
     f.templateRequirements = templateRequirements(t.searchParams, t.imageWithTag());
     f.templateMinCuda = requiredMinCuda(f.templateRequirements);
+    f.templateDiskGb = t.recommendedDiskGb;
 }
 
 void SearchView::recompute(App& app) {
     const Settings& s = app.settings();
     const SearchFilters& f = s.filters;
+    const double newVolumeGb = rent_.volumeMode == 2 ? rent_.volumeSizeGb : 0.0;
+    for (Offer& o : offers_) setNewVolumeCost(o, newVolumeGb);
     metrics_ = computeMetrics(offers_);
     defects_ = evaluateDefects(offers_, s.defects, s.blacklist);
     const auto order = sortedOrder(offers_, metrics_, f.sortKey, f.sortDesc);
@@ -371,7 +376,7 @@ void SearchView::openRent(App& app, const Offer& o) {
     const Settings& s = app.settings();
     RentState r;
     r.offer = o;
-    r.bidPrice = o.minBid.value_or(o.dphTotal.value_or(0.0));
+    r.bidPrice = o.minBid ? *o.minBid * 1.05 : o.dphTotal.value_or(0.0);
     r.volumeMode = rent_.volumeMode;
     r.volumeId = rent_.volumeId;
     r.volumeSizeGb = rent_.volumeSizeGb;
@@ -699,15 +704,25 @@ void SearchView::drawFilterPanel(App& app) {
             f.diskGb = std::clamp(f.diskGb, 1.0, 100000.0);
             filtersChanged(app);
         }
+        if (f.templateDiskGb && *f.templateDiskGb > f.diskGb) {
+            ui::TextDim(std::format("Template needs {:.0f} GB: prices include {:.0f} GB", *f.templateDiskGb,
+                                    f.effectiveDiskGb())
+                            .c_str());
+        }
         const char* volModes[] = {"No volume", "Link existing volume", "Create new local volume"};
         ImGui::SetNextItemWidth(-FLT_MIN);
         if (ImGui::Combo("##addvol", &rent_.volumeMode, volModes, 3)) {
             if (rent_.volumeMode == 1 && !volumesRes_.loaded) volumesRes_.fetch(app, cmd::showVolumes());
+            recompute(app);
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add volume: attached when you rent an instance");
         if (rent_.volumeMode == 2) {
             ImGui::SetNextItemWidth(fullW * 0.5f);
-            ImGui::InputDouble("Volume GB", &rent_.volumeSizeGb, 0, 0, "%.0f");
+            if (ImGui::InputDouble("Volume GB", &rent_.volumeSizeGb, 0, 0, "%.0f")) {
+                rent_.volumeSizeGb = std::clamp(rent_.volumeSizeGb, 0.0, 1000000.0);
+                recompute(app);
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("The new volume's cost is included in the shown prices.");
         }
     }
 
@@ -802,12 +817,12 @@ void SearchView::drawFilterPanel(App& app) {
                    "Thresholds are configurable in Settings.");
     ImGui::Indent();
     ImGui::BeginDisabled(!f.hideDefective);
-    if (ImGui::Checkbox("Show them greyed out", &showDefective_)) recompute(app);
+    if (ImGui::Checkbox("Show them (marked defective)", &showDefective_)) recompute(app);
     ImGui::EndDisabled();
     ImGui::Unindent();
     // Always rendered (also when 0) so the panel layout never jumps.
     ImGui::TextColored(hiddenDefective_ > 0 && f.hideDefective ? p.warning : p.textDim, "%d defective offers %s",
-                       hiddenDefective_, showDefective_ ? "shown greyed" : "hidden");
+                       hiddenDefective_, showDefective_ ? "shown" : "hidden");
 
     ImGui::SeparatorText("Raw Query");
     ImGui::SetNextItemWidth(-FLT_MIN);
@@ -940,6 +955,7 @@ void SearchView::drawCards(App& app) {
     ui::OfferCardContext ctx;
     ctx.currency = &st.currency;
     ctx.interruptible = st.filters.rentalType == RentalType::Interruptible;
+    ctx.diskGb = st.filters.effectiveDiskGb();
     // Cards share one height so the list can be clipped; it is the measured content height of the cards
     // drawn last frame (all cards have the same layout), with a formula-based estimate on the first frame.
     float measured = 0.0f;
@@ -951,7 +967,6 @@ void SearchView::drawCards(App& app) {
     while (clipper.Step()) {
         for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
             const std::size_t idx = visible_[static_cast<std::size_t>(i)];
-            ctx.greyed = defects_[idx].defective();
             ctx.rentedByMe = offers_[idx].machineId && rentedMachines_.contains(*offers_[idx].machineId);
             ctx.incompatible = isIncompatible(offers_[idx], st.filters);
             if (ctx.incompatible) ctx.incompatibleWhy = incompatibleReason(offers_[idx], st.filters);
@@ -1061,48 +1076,55 @@ void SearchView::drawTable(App& app) {
             const bool rentedByMe = o.machineId && rentedMachines_.contains(*o.machineId);
             ImGui::TableNextRow();
             ImGui::PushID(static_cast<int>(idx));
-            if (defective) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.45f);
+            if (rentedByMe) ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ui::col(ui::palette().info, 0.10f));
             for (int c = 0; c < ColCount; ++c) {
                 if (!ImGui::TableSetColumnIndex(c)) continue;
                 if (c == ColId) {
                     ui::TableRowSelectable(textCell(c, o, m, st.currency).c_str(), false);
                     if (ImGui::BeginPopupContextItem("##rowctx")) {
-                        if (auto a = ui::OfferContextMenuItems(o); a != ui::OfferAction::None) pending = std::pair{a, idx};
+                        if (auto a = ui::OfferContextMenuItems(o, !rentedByMe); a != ui::OfferAction::None) pending = std::pair{a, idx};
                         ImGui::EndPopup();
                     }
                 } else if (c == ColRent) {
-                    if (ImGui::SmallButton("RENT")) pending = std::pair{ui::OfferAction::Rent, idx};
+                    if (rentedByMe) {
+                        ImGui::BeginDisabled();
+                        ImGui::PushStyleColor(ImGuiCol_Text, ui::palette().info);
+                        ImGui::SmallButton("RENTED");
+                        ImGui::PopStyleColor();
+                        ImGui::EndDisabled();
+                        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                            ImGui::SetTooltip("Rented by you: you already have an instance on this machine.");
+                        }
+                    } else if (ImGui::SmallButton("RENT")) {
+                        pending = std::pair{ui::OfferAction::Rent, idx};
+                    }
                 } else if (c == ColTflopsPerDollar && m.rankTflopsPerDollar) {
                     ui::TextWithColor(ui::rankColor(*m.rankTflopsPerDollar), textCell(c, o, m, st.currency).c_str());
                 } else if (c == ColDlpPerDollar && m.rankDlpPerDollar) {
                     ui::TextWithColor(ui::rankColor(*m.rankDlpPerDollar), textCell(c, o, m, st.currency).c_str());
                 } else if (c == ColVerification) {
-                    const ImVec4 vc = o.verification == "verified"     ? ui::palette().success
-                                      : o.verification == "deverified" ? ui::palette().danger
-                                                                       : ui::palette().warning;
-                    ui::TextWithColor(vc, o.verification.c_str());
+                    ui::TextWithColor(ui::verificationColor(o.verification), o.verification.c_str());
+                    if (defective) {
+                        ImGui::SameLine();
+                        ui::TextWithColor(ui::palette().danger, "defective");
+                        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", fmt::join(defects_[idx].reasons, "\n").c_str());
+                    }
                 } else if (c == ColPrice) {
                     ImGui::TextUnformatted(textCell(c, o, m, st.currency).c_str());
-                    if (ImGui::IsItemHovered()) ui::OfferPriceTooltip(o, st.currency);
-                } else if (c == ColMachine && rentedByMe) {
-                    ui::TextWithColor(ui::palette().info, (ICON_FA_USER_CHECK " " + textCell(c, o, m, st.currency)).c_str());
-                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rented by you: you already have an instance on this machine.");
+                    if (ImGui::IsItemHovered()) ui::OfferPriceTooltip(o, st.currency, st.filters.effectiveDiskGb());
                 } else if (c == ColGpu && incompatible) {
-                    ui::TextWithColor(ui::palette().danger, ICON_FA_BAN);
-                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", incompatibleReason(o, st.filters).c_str());
-                    ImGui::SameLine(0, ImGui::GetStyle().ItemInnerSpacing.x);
-                    ImGui::TextUnformatted(textCell(c, o, m, st.currency).c_str());
+                    ui::TextWithColor(ui::palette().danger, textCell(c, o, m, st.currency).c_str());
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Incompatible with the template:\n%s", incompatibleReason(o, st.filters).c_str());
                 } else if (c == ColCuda && incompatible && incompatibleReason(o, st.filters).find("cuda_max_good") != std::string::npos) {
                     ui::TextWithColor(ui::palette().danger, textCell(c, o, m, st.currency).c_str());
                     if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", incompatibleReason(o, st.filters).c_str());
                 } else {
                     ImGui::TextUnformatted(textCell(c, o, m, st.currency).c_str());
                 }
-                if (c == ColGpu && defective && ImGui::IsItemHovered()) {
+                if (c == ColGpu && defective && !incompatible && ImGui::IsItemHovered()) {
                     ImGui::SetTooltip("%s", fmt::join(defects_[idx].reasons, "\n").c_str());
                 }
             }
-            if (defective) ImGui::PopStyleVar();
             ImGui::PopID();
         }
     }
@@ -1139,7 +1161,7 @@ void SearchView::drawRentModal(App& app) {
     ImGui::PopFont();
     ImGui::SameLine();
     ui::TextDim(std::format("offer {}  machine {}  {}  {}/hr", o.id, o.machineId.value_or(0), o.geolocation,
-                            fmt::money(o.dphTotal, app.settings().currency))
+                            fmt::money(o.priceHr, app.settings().currency))
                     .c_str());
     ImGui::Separator();
 
@@ -1196,7 +1218,9 @@ void SearchView::drawRentModal(App& app) {
         label("Bid ($/hr)");
         ImGui::InputDouble("##bid", &r.bidPrice, 0.01, 0.1, "%.4f");
         ImGui::SetCursorPosX(labelW);
-        ui::TextDim(std::format("Minimum bid: {}/hr", fmt::money(o.minBid, app.settings().currency, 4)).c_str());
+        ui::TextDim(std::format("Minimum bid: {}/hr  (default: +5 % like the vast.ai console)",
+                                fmt::money(o.minBid, app.settings().currency, 4))
+                        .c_str());
     }
 
     ImGui::Spacing();

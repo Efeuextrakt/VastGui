@@ -70,6 +70,12 @@ void to_json(json& j, const Settings& s) {
     j["blacklist"] = s.blacklist;
     j["template"] = s.currentTemplate;
     j["card_view"] = s.cardView;
+    j["template_card_view"] = s.templateCardView;
+    j["template_sort"] = s.templateSort;
+    j["template_sort_desc"] = s.templateSortDesc;
+    j["instance_card_view"] = s.instanceCardView;
+    j["instance_sort"] = s.instanceSort;
+    j["instance_sort_desc"] = s.instanceSortDesc;
     j["offer_columns"] = boolsToJson(s.offerColumns);
     j["instance_columns"] = boolsToJson(s.instanceColumns);
     j["sidebar_collapsed"] = s.sidebarCollapsed;
@@ -110,6 +116,12 @@ void from_json(const json& j, Settings& s) {
     if (const json* b = find(j, "blacklist")) s.blacklist = b->get<Blacklist>();
     if (const json* t = find(j, "template"); t && t->is_object()) s.currentTemplate = t->get<Template>();
     s.cardView = optBool(j, "card_view").value_or(true);
+    s.templateCardView = optBool(j, "template_card_view").value_or(true);
+    s.templateSort = str(j, "template_sort") == "date" ? "date" : "name";
+    s.templateSortDesc = optBool(j, "template_sort_desc").value_or(false);
+    s.instanceCardView = optBool(j, "instance_card_view").value_or(true);
+    s.instanceSort = str(j, "instance_sort", "label");
+    s.instanceSortDesc = optBool(j, "instance_sort_desc").value_or(false);
     s.offerColumns = boolsFromJson(j, "offer_columns");
     s.instanceColumns = boolsFromJson(j, "instance_columns");
     s.sidebarCollapsed = optBool(j, "sidebar_collapsed").value_or(false);

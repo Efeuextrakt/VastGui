@@ -192,6 +192,22 @@ void SettingsView::drawAppearance(App& app) {
     ImGui::SameLine();
     changed |= ImGui::RadioButton("Light", &theme, 1);
     s.theme = theme == 1 ? "light" : "dark";
+    auto viewChoice = [&](const char* label, const char* id, bool* cards) {
+        row(label, lw);
+        ImGui::PushID(id);
+        int v = *cards ? 0 : 1;
+        bool c = ImGui::RadioButton("Cards", &v, 0);
+        ImGui::SameLine();
+        c |= ImGui::RadioButton("Table", &v, 1);
+        ImGui::PopID();
+        if (c) {
+            *cards = v == 0;
+            app.markSettingsDirty();
+        }
+    };
+    viewChoice("Search view", "searchview", &s.cardView);
+    viewChoice("Templates view", "tplview", &s.templateCardView);
+    viewChoice("Instances view", "instview", &s.instanceCardView);
     row("Accent colour", lw);
     changed |= ImGui::ColorEdit3("##accent", s.accent.data(), ImGuiColorEditFlags_NoInputs);
     ImGui::SameLine();

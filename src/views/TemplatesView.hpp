@@ -6,6 +6,7 @@
 
 #include <array>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -27,9 +28,15 @@ private:
     void reloadAfterChange(App& app);
     void drawForm(App& app);
     void editFrom(const json& row, bool asNew);
+    void useTemplate(App& app, const json& row);
+    void rowMenu(App& app, const json& row);
+    void drawCards(App& app, const json& rows);
+    void drawCard(App& app, const json& row, int index, const ImVec2& size);
 
     std::array<Resource, 3> res_;  // indexed by Scope
     std::array<ui::JsonTableState, 3> tables_;
+    std::vector<std::size_t> cardOrder_;  // sorted row indices for the card view
+    std::tuple<int, double, std::size_t, std::string, bool> cardOrderKey_{-1, 0.0, 0, {}, false};
     std::string query_;
     int scope_ = -1;  // decided on first draw: My templates when an API key is set
     int scopeRequest_ = -1;

@@ -4,7 +4,8 @@ rem VastGui build script - wrapper around CMake + Ninja (parallel, incremental)
 rem
 rem   build.bat                release build with MinGW-w64 g++ (MSYS2 UCRT64) -> VastGui.exe
 rem   build.bat debug          debug build (-O0 -g)
-rem   build.bat test           build + run unit tests              -> VastGuiTests.exe
+rem   build.bat run            build, then launch VastGui.exe (combinable: debug run, msvc run)
+rem   build.bat test            build + run unit tests              -> VastGuiTests.exe
 rem   build.bat package        release build + tests + zip         -> release\VastGui-<ver>-win64.zip
 rem   build.bat clean          remove build\ and the executables
 rem   build.bat msvc [mode]    same, but with MSVC cl.exe (/MT, /W4)
@@ -17,7 +18,9 @@ cd /d "%~dp0"
 
 set "MODE=release"
 set "TOOLCHAIN=gcc"
+set "RUN=0"
 for %%A in (%*) do (
+    if /i "%%A"=="run"     set "RUN=1"
     if /i "%%A"=="release" set "MODE=release"
     if /i "%%A"=="debug"   set "MODE=debug"
     if /i "%%A"=="test"    set "MODE=test"
@@ -33,6 +36,11 @@ if "%MODE%"=="clean" (
     if exist VastGuiTests.exe del /q VastGuiTests.exe
     echo Cleaned.
     exit /b 0
+)
+
+rem A running exe is write-locked by Windows, so it could not be replaced - fail before building.
+if "%RUN%"=="1" if exist VastGui.exe (
+    2>nul (>>VastGui.exe call ) || (echo ERROR: VastGui.exe is running - close it first. & exit /b 1)
 )
 
 set "CFG=%MODE%"
@@ -83,4 +91,8 @@ cmake --build "%BDIR%" --target VastGui || exit /b 1
 copy /y "%BDIR%\VastGui.exe" VastGui.exe >nul || exit /b 1
 echo.
 echo Built VastGui.exe
+if "%RUN%"=="1" (
+    echo Launching VastGui.exe
+    start "" "%CD%\VastGui.exe"
+)
 exit /b 0

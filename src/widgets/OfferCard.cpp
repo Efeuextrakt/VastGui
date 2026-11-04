@@ -47,18 +47,12 @@ void metricLine(const char* label, std::optional<double> v, int decimals, std::o
     }
 }
 
-ImVec4 verificationColor(const std::string& v) {
-    if (v == "verified") return palette().success;
-    if (v == "deverified") return palette().danger;
-    return palette().warning;
-}
-
 }  // namespace
 
 // Initial estimate only; SearchView switches to the measured content height after the first frame.
 float OfferCardHeight() { return ImGui::GetTextLineHeightWithSpacing() * 6.0f + ImGui::GetStyle().WindowPadding.y * 2.0f; }
 
-void OfferPriceTooltip(const Offer& o, const CurrencyFormat& c) {
+void OfferPriceTooltip(const Offer& o, const CurrencyFormat& c, std::optional<double> diskGb) {
     if (!ImGui::BeginTooltip()) return;
     ImGui::TextUnformatted("Price breakdown");
     ImGui::Separator();
@@ -67,11 +61,19 @@ void OfferPriceTooltip(const Offer& o, const CurrencyFormat& c) {
         ImGui::SameLine(ImGui::GetFontSize() * 11.0f);
         ImGui::TextUnformatted(v.c_str());
     };
-    row("GPU", fmt::money(o.gpuCostPerHour ? o.gpuCostPerHour : o.dphBase, c, 4) + "/hr");
-    row("Storage", fmt::money(o.diskCostPerHour ? o.diskCostPerHour : o.storageTotalCostHr, c, 4) + "/hr");
+    const std::optional<double> gpu = o.gpuCostPerHour ? o.gpuCostPerHour : o.dphBase;
+    row(o.bidMarkupPerHour > 0.0 ? "GPU (min bid)" : "GPU", fmt::money(gpu, c, 4) + "/hr");
+    if (o.bidMarkupPerHour > 0.0) row("  suggested bid +5 %", fmt::money(o.bidMarkupPerHour, c, 4) + "/hr");
+    const std::string storage = diskGb ? std::format("Storage ({:.0f} GB)", *diskGb) : std::string("Storage");
+    row(storage.c_str(), fmt::money(o.diskCostPerHour ? o.diskCostPerHour : o.storageTotalCostHr, c, 4) + "/hr");
     if (o.storageCostGbMonth) row("  per GB", fmt::money(*o.storageCostGbMonth, c, 3) + "/month");
-    row("Total", fmt::money(o.dphTotal, c, 4) + "/hr");
-    if (o.minBid) row("Min bid", fmt::money(*o.minBid, c, 4) + "/hr");
+    if (o.volumePerHour > 0.0) row("New volume", fmt::money(o.volumePerHour, c, 4) + "/hr");
+    if (o.discountedPerHour && o.dphTotal && *o.dphTotal - *o.discountedPerHour > 1e-6) {
+        row("Discount", "-" + fmt::money(*o.dphTotal - *o.discountedPerHour, c, 4) + "/hr");
+    }
+    if (o.slaPremiumPerHour && *o.slaPremiumPerHour > 0.0) row("SLA premium", fmt::money(*o.slaPremiumPerHour, c, 4) + "/hr");
+    ImGui::Separator();
+    row("Total", fmt::money(o.priceHr, c, 4) + "/hr");
     ImGui::Separator();
     TextDim("Bandwidth (billed separately)");
     row("Upload", o.inetUpCostGb ? fmt::money(*o.inetUpCostGb * 1000.0, c, 2) + "/TB" : std::string(kMissing));
@@ -79,9 +81,9 @@ void OfferPriceTooltip(const Offer& o, const CurrencyFormat& c) {
     ImGui::EndTooltip();
 }
 
-OfferAction OfferContextMenuItems(const Offer& o) {
+OfferAction OfferContextMenuItems(const Offer& o, bool canRent) {
     OfferAction a = OfferAction::None;
-    if (ImGui::MenuItem(ICON_FA_ROCKET "  Rent...")) a = OfferAction::Rent;
+    if (ImGui::MenuItem(ICON_FA_ROCKET "  Rent...", nullptr, false, canRent)) a = OfferAction::Rent;
     ImGui::Separator();
     if (ImGui::MenuItem(ICON_FA_COPY "  Copy offer ID", std::to_string(o.id).c_str())) a = OfferAction::CopyOfferId;
     if (ImGui::MenuItem(ICON_FA_COPY "  Copy machine ID", o.machineId ? std::to_string(*o.machineId).c_str() : nullptr,
@@ -108,10 +110,13 @@ OfferAction OfferCard(const Offer& o, const OfferMetrics& m, const DefectInfo& d
     const float height = ctx.height > 0 ? ctx.height : OfferCardHeight();
 
     ImGui::PushID(static_cast<int>(o.id));
-    if (ctx.greyed) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.45f);
     ImGui::PushStyleColor(ImGuiCol_ChildBg, p.card);
-    ImGui::PushStyleColor(ImGuiCol_Border, d.defective() ? ImVec4(p.danger.x, p.danger.y, p.danger.z, 0.6f) : p.border);
+    // Rented by you: bluish border; defective: reddish border (the card is not dimmed).
+    const ImVec4 border = ctx.rentedByMe ? p.info : d.defective() ? ImVec4(p.danger.x, p.danger.y, p.danger.z, 0.6f) : p.border;
+    ImGui::PushStyleColor(ImGuiCol_Border, border);
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, ctx.rentedByMe ? std::max(1.5f, ImGui::GetStyle().ChildBorderSize * 1.5f)
+                                                                       : ImGui::GetStyle().ChildBorderSize);
     ImGui::BeginChild("##card", ImVec2(0, height), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar);
     const bool cardHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
     if (cardHovered) {
@@ -131,23 +136,6 @@ OfferAction OfferCard(const Offer& o, const OfferMetrics& m, const DefectInfo& d
         // Left: identity + GPU.
         ImGui::TableSetColumnIndex(0);
         dimLine(std::format("m:{}  host:{}", o.machineId.value_or(0), o.hostId.value_or(0)));
-        // "Rented by you" badge, shortened when the column is narrow; it sits on an existing line so the card height
-        // never changes (on the CUDA line, or on the id line when that one shows INCOMPATIBLE).
-        auto rentedBadge = [&] {
-            constexpr const char* kLabels[] = {ICON_FA_USER_CHECK " RENTED BY YOU", ICON_FA_USER_CHECK " RENTED",
-                                               ICON_FA_USER_CHECK};
-            ImGui::SameLine();
-            const float avail = ImGui::GetContentRegionAvail().x;
-            const char* label = kLabels[2];
-            for (const char* l : kLabels) {
-                if (avail >= BadgeSize(l).x) {
-                    label = l;
-                    break;
-                }
-            }
-            InlineBadge(label, p.info, true, "Rented by you: you already have an instance on this machine.");
-        };
-        if (ctx.rentedByMe && ctx.incompatible) rentedBadge();
         ImGui::PushFont(nullptr, ImGui::GetStyle().FontSizeBase * 1.45f);
         ImGui::Text("%dx %s", o.numGpus, o.gpuName.c_str());
         ImGui::PopFont();
@@ -155,14 +143,13 @@ OfferAction OfferCard(const Offer& o, const OfferMetrics& m, const DefectInfo& d
         ImGui::Text("%s GB/GPU  " ICON_FA_MEMORY "  %s GB total", formatMetric(o.gpuRamGb(), 0).c_str(),
                     formatMetric(o.totalVramGb(), 0).c_str());
         if (ctx.incompatible) {
-            InlineBadge(ICON_FA_BAN " INCOMPATIBLE", p.danger, true, ctx.incompatibleWhy.c_str());
+            InlineBadge("INCOMPATIBLE", p.danger, true, ctx.incompatibleWhy.c_str());
             ImGui::SameLine();
             const bool cudaUnmet = ctx.incompatibleWhy.find("cuda_max_good") != std::string::npos;
             TextWithColor(cudaUnmet ? p.danger : p.textDim, std::format("CUDA {}", formatMetric(o.cudaMaxGood, 1)).c_str());
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", ctx.incompatibleWhy.c_str());
         } else {
             dimLine(std::format("Max CUDA {}", formatMetric(o.cudaMaxGood, 1)));
-            if (ctx.rentedByMe) rentedBadge();
         }
 
         // Middle: machine details.
@@ -203,9 +190,9 @@ OfferAction OfferCard(const Offer& o, const OfferMetrics& m, const DefectInfo& d
         ImGui::TableSetColumnIndex(2);
         metricLine("DLPerf", o.dlperf, 1, std::nullopt);
         metricLine("TFLOPS/$/hr", m.tflopsPerDollar, 1, m.rankTflopsPerDollar);
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("total_flops / dph_total - higher is better");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("TFLOPS per $/hr of the shown price - higher is better");
         metricLine("DLP/$/hr", m.dlpPerDollar, 1, m.rankDlpPerDollar);
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("dlperf / dph_total - higher is better");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("DLPerf per $/hr of the shown price - higher is better");
 
         // Right: status + price.
         ImGui::TableSetColumnIndex(3);
@@ -218,20 +205,31 @@ OfferAction OfferCard(const Offer& o, const OfferMetrics& m, const DefectInfo& d
         if (d.defective()) {
             ImGui::SameLine();
             const std::string why = fmt::join(d.reasons, "\n");
-            Badge(ICON_FA_TRIANGLE_EXCLAMATION " defective", p.danger, false, why.c_str());
+            Badge("defective", p.danger, false, why.c_str());
         }
         dimLine(std::format(ICON_FA_CLOCK " {}  " ICON_FA_HEART_PULSE " {}",
                             o.durationSec ? fmt::humanDuration(*o.durationSec) : std::string(kMissing),
                             fmt::percent(o.reliability, 2)));
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Max duration / host reliability\nOffer ID %lld", static_cast<long long>(o.id));
-        const std::optional<double> price = ctx.interruptible && o.minBid ? o.minBid : o.dphTotal;
         ImGui::PushFont(nullptr, ImGui::GetStyle().FontSizeBase * 1.5f);
-        ImGui::TextUnformatted((fmt::money(price, cur) + "/hr").c_str());
+        ImGui::TextUnformatted((fmt::money(o.priceHr, cur) + "/hr").c_str());
         ImGui::PopFont();
-        if (ImGui::IsItemHovered()) OfferPriceTooltip(o, cur);
-        dimLine(ctx.interruptible ? "min bid  + bandwidth" : "+ bandwidth");
-        if (ImGui::IsItemHovered()) OfferPriceTooltip(o, cur);
-        if (ImGui::Button(ICON_FA_ROCKET "  RENT", ImVec2(-FLT_MIN, 0))) action = OfferAction::Rent;
+        if (ImGui::IsItemHovered()) OfferPriceTooltip(o, cur, ctx.diskGb);
+        dimLine(ctx.interruptible ? "suggested bid  + bandwidth" : "+ bandwidth");
+        if (ImGui::IsItemHovered()) OfferPriceTooltip(o, cur, ctx.diskGb);
+        if (ctx.rentedByMe) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(p.info.x, p.info.y, p.info.z, 0.22f));
+            ImGui::PushStyleColor(ImGuiCol_Text, p.info);
+            ImGui::BeginDisabled();
+            ImGui::Button(ICON_FA_USER_CHECK "  RENTED", ImVec2(-FLT_MIN, 0));
+            ImGui::EndDisabled();
+            ImGui::PopStyleColor(2);
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                ImGui::SetTooltip("Rented by you: you already have an instance on this machine.");
+            }
+        } else if (ImGui::Button(ICON_FA_ROCKET "  RENT", ImVec2(-FLT_MIN, 0))) {
+            action = OfferAction::Rent;
+        }
         ImGui::EndTable();
     }
     if (ctx.measuredHeight) {
@@ -242,13 +240,12 @@ OfferAction OfferCard(const Offer& o, const OfferMetrics& m, const DefectInfo& d
     }
 
     if (ImGui::BeginPopupContextWindow("##offerctx")) {
-        if (auto a = OfferContextMenuItems(o); a != OfferAction::None) action = a;
+        if (auto a = OfferContextMenuItems(o, !ctx.rentedByMe); a != OfferAction::None) action = a;
         ImGui::EndPopup();
     }
     ImGui::EndChild();
-    ImGui::PopStyleVar();
+    ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(2);
-    if (ctx.greyed) ImGui::PopStyleVar();
     ImGui::PopID();
     return action;
 }

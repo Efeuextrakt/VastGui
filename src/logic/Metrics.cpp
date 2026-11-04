@@ -23,12 +23,12 @@ std::optional<double> safeRatio(std::optional<double> num, std::optional<double>
 
 std::optional<double> tflopsPerDollar(const Offer& o) {
     if (!o.totalFlops || *o.totalFlops <= 0.0) return std::nullopt;
-    return safeRatio(o.totalFlops, o.dphTotal);
+    return safeRatio(o.totalFlops, o.priceHr);
 }
 
 std::optional<double> dlpPerDollar(const Offer& o) {
     if (!o.dlperf || *o.dlperf <= 0.0) return std::nullopt;
-    return safeRatio(o.dlperf, o.dphTotal);
+    return safeRatio(o.dlperf, o.priceHr);
 }
 
 float percentileRank(double value, std::span<const double> sorted) {
@@ -139,7 +139,7 @@ std::vector<Offer> mergeOfferSamples(std::vector<std::vector<Offer>> samples) {
                 continue;
             }
             Offer& kept = out[it->second];
-            if (o.dphTotal && (!kept.dphTotal || *o.dphTotal < *kept.dphTotal)) kept = std::move(o);
+            if (o.priceHr && (!kept.priceHr || *o.priceHr < *kept.priceHr)) kept = std::move(o);
         }
     }
     return out;
@@ -312,7 +312,7 @@ std::vector<std::string> unmetRequirements(const Offer& o, const json& requireme
 std::optional<double> sortValue(const Offer& o, const OfferMetrics& m, SortKey key) {
     switch (key) {
         case SortKey::Score: return o.score;
-        case SortKey::Price: return o.dphTotal;
+        case SortKey::Price: return o.priceHr;
         case SortKey::TflopsPerDollar: return m.tflopsPerDollar;
         case SortKey::DlpPerDollar: return m.dlpPerDollar;
         case SortKey::Reliability: return o.reliability;

@@ -41,6 +41,8 @@ bool VSplitter(const char* id, float* leftWidth, float minLeft, float maxLeft);
 // Error shown on the current line (truncated, full text in a tooltip); renders nothing when empty.
 void InlineError(const std::string& error, std::size_t maxChars = 90);
 void TextDim(const char* text);
+// Shortens `s` with "..." to fit `maxWidth` pixels in the current font.
+[[nodiscard]] std::string Ellipsize(const std::string& s, float maxWidth);
 void TextWithColor(const ImVec4& c, const char* text);
 // Label on the left, value right-aligned within the given width (or remaining width).
 void KeyValue(const char* key, const std::string& value, float width = 0.0f);

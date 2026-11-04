@@ -55,6 +55,50 @@ TEST_SUITE("Backend") {
         CHECK(od.consoleStatus(now, json{{"balance", -1.0}, {"billing_creditonly", true}}).label == "inactive");
     }
 
+    TEST_CASE("instance cost matches the vast.ai console") {
+        // Not reserved: vast.ai sends discountedTotalPerHour 0 - the console shows totalHour.
+        json j = {{"id", 1}, {"actual_status", "running"}, {"dph_total", 0.1248}, {"credit_discount_max", 0.4},
+                  {"instance", {{"gpuCostPerHour", 0.1231}, {"diskHour", 0.0017}, {"totalHour", 0.1248},
+                                {"discountedTotalPerHour", 0.0}}}};
+        Instance i = j.get<Instance>();
+        CHECK(i.costNowHr.value() == doctest::Approx(0.1248));
+        // Reserved with prepaid credit left: the discounted price.
+        j["credit_discount"] = 0.25;
+        j["credit_balance"] = 10.0;
+        j["instance"]["discountedTotalPerHour"] = 0.0940;
+        i = j.get<Instance>();
+        CHECK(i.costNowHr.value() == doctest::Approx(0.0940));
+        CHECK(i.costListHr.value() == doctest::Approx(0.1248));
+        // Prepaid credit used up: back to the normal price.
+        j["credit_balance"] = 0.0;
+        CHECK(j.get<Instance>().costNowHr.value() == doctest::Approx(0.1248));
+        // Running bid that is not outbid: +5 % on the GPU like the console.
+        j = {{"id", 2}, {"actual_status", "running"}, {"is_bid", true}, {"min_bid", 0.3}, {"dph_total", 0.4},
+             {"instance", {{"gpuCostPerHour", 0.4}, {"diskHour", 0.01}, {"totalHour", 0.41}}}};
+        CHECK(j.get<Instance>().costNowHr.value() == doctest::Approx(0.43));
+        // Stopped: only storage (totalHour); the GPU line shows the search price for reference.
+        j = {{"id", 3}, {"actual_status", "exited"}, {"dph_total", 1.0},
+             {"search", {{"gpuCostPerHour", 0.95}}},
+             {"instance", {{"gpuCostPerHour", 0.0}, {"diskHour", 0.05}, {"totalHour", 0.05}, {"discountedTotalPerHour", 0.0}}}};
+        i = j.get<Instance>();
+        CHECK(i.costNowHr.value() == doctest::Approx(0.05));
+        CHECK(i.costGpuHr.value() == doctest::Approx(0.95));
+        // Without the price object: running uses discounted_dph_total when reserved, stopped only the storage.
+        j = {{"id", 4}, {"actual_status", "running"}, {"dph_total", 1.0}, {"discounted_dph_total", 0.8},
+             {"credit_discount", 0.2}, {"credit_balance", 5.0}};
+        CHECK(j.get<Instance>().costNowHr.value() == doctest::Approx(0.8));
+        j = {{"id", 5}, {"actual_status", "exited"}, {"dph_total", 1.0}, {"storage_total_cost", 0.05}};
+        CHECK(j.get<Instance>().costNowHr.value() == doctest::Approx(0.05));
+    }
+
+    TEST_CASE("compact numbers") {
+        CHECK(fmt::compactNumber(950) == "950");
+        CHECK(fmt::compactNumber(1234) == "1.2k");
+        CHECK(fmt::compactNumber(12345) == "12k");
+        CHECK(fmt::compactNumber(999999) == "1.0M");
+        CHECK(fmt::compactNumber(3400000) == "3.4M");
+    }
+
     TEST_CASE("REST URL building") {
         RestSpec s;
         s.path = "/instances/";

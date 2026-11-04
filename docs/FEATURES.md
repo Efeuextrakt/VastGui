@@ -14,21 +14,29 @@
 - Filter panel with template box (change/edit template), secure cloud, disk size + volume, reliability,
   duration, machine options, CUDA/driver/Ubuntu minimums, 20 min/max range sliders, raw query box (vastai query
   syntax), presets.
-- **Metrics**: `TFLOPS/$/hr = total_flops / dph_total`, `DLP/$/hr = dlperf / dph_total` (higher is better),
+- **Prices** match the vast.ai web console: vast.ai's discounted total (`search.discountedTotalPerHour`: GPU +
+  storage for the requested disk size, plus an SLA premium if any). The disk size is the larger of the *Disk Space*
+  filter and the template's recommended disk (the filter panel says so when the template needs more). For
+  interruptible offers the price is the console's suggested bid (minimum bid + 5 % of the GPU price, also the
+  default bid in the rent dialog); with *Create new local volume* the volume's cost is included. Bandwidth is
+  billed separately. Hover a price for the breakdown.
+- **Metrics**: `TFLOPS/$/hr = total_flops / price`, `DLP/$/hr = dlperf / price` (higher is better),
   colour-coded green -> red by percentile within the current result set; missing values show `—`.
 - **Defective machine filter** (on by default, thresholds in Settings): reliability below X %
   (default 90 %), missing/zero `inet_down`, `inet_up`, `total_flops`, `dlperf`, `disk_bw`, `cuda_max_good`,
   DLPerf or TFLOPS per GPU more than 40 % below the median of the same GPU model in the current results
   (needs >= 3 samples of that model), or a blacklisted machine/host. A deverified status alone is *not* a defect -
   you decide by blacklisting machines (Ban button on the Instances page, or an offer's right-click menu).
-  The filter panel shows how many offers are hidden and can show them greyed out instead.
+  The filter panel shows how many offers are hidden and can show them anyway (with a red *defective* tag and border).
   Deverified offers are only listed when *Unverified Machines* and its sub-option *Deverified Machines* are ticked.
+  Verification tags: verified green, unverified yellow, deverified orange.
 - **Incompatible machines**: offers that fail the selected template's requirements (its `extra_filters`, e.g.
   `gpu_ram >= 40000`, plus the CUDA version in the image tag such as `...-cuda12.4`) get a red *INCOMPATIBLE*
-  badge (card) or a red marker (table); the tooltip lists the unmet requirements. With *Incompatible Machines*
+  tag (card) or a red GPU name (table); the tooltip lists the unmet requirements. With *Incompatible Machines*
   unticked they are hidden. A template without requirements makes no offer incompatible (see the `?` help).
 - **Machines rented by me**: offers on machines where you already have an instance (running, loading or stopped)
-  are hidden; tick *Machines Rented by Me* to show them with a *RENTED BY YOU* badge.
+  are hidden; tick *Machines Rented by Me* to show them with a blue border and a disabled *RENTED* button (a blue
+  row and *RENTED* in the table).
 - **Template picker** (Search -> *Change Template*): tabs *My templates* (first; yours, public and private),
   *Recommended* and *Search*; select a row and press *Use selected*.
 - **Rent dialog**: disk, label, bid price for interruptible, link/create volume and a one-line template summary
@@ -57,8 +65,21 @@ search to search because the server keeps sampling. Each request at limit 1000 d
 
 ## Instances
 
+- **Card view** (default; card / table toggle on the toolbar, default in Settings > Appearance): one wide card per
+  instance, like the Search offer cards - status, name, GPU, machine / host and location; image, template, uptime,
+  SSH command (copy) and ports; GPU / CPU / VRAM / disk usage bars; current cost (breakdown on hover), reserve
+  badge, TFLOPS/$/hr and DLP/$/hr, $/hr trend and the action icons. Tick cards (or *Select all*) for the toolbar's
+  bulk actions; selected cards get a blue border, outbid instances a red one. Right-click a card for the full
+  menu, double-click for the raw JSON. Sort by name, ID, status, GPU, $/hr or uptime, ascending or descending
+  (default name A-Z; instances without a name go last). The filter and status filter apply to both views.
 - Status-coloured table (interruptible instances that should run but don't are shown as a red *outbid* badge
   that opens *Change bid*; also a status filter and a count in the header), bulk start/stop/reboot/destroy, label.
+- **Real costs**: the *$/hr* column, the header total and the $/hr sparkline show what each instance costs right
+  now, calculated like the vast.ai console from vast.ai's `instance` price: the normal price while running (a
+  running bid +5 % on the GPU), only storage while stopped, and the reserved (discounted) price only while
+  prepaid credit is left on the instance (`credit_balance > 0` and `credit_discount > 0`). The tooltip breaks it
+  down (GPU / storage / reserved discount) and shows the normal running price. TFLOPS/$/hr and DLP/$/hr use the
+  normal price.
 - Logs window: separate Instance / Daemon log tabs, line numbers, auto-refresh, save to file; tail defaults to
   1000 lines, -/+ step 1000, *Max* = 20000.
 - Copy SSH command / SCP URL, open Jupyter, change bid, prepay, deposit, execute, copy files (between remote
@@ -71,9 +92,21 @@ search to search because the server keeps sampling. Each request at limit 1000 d
   out) or a custom amount, and needs a second confirmation because the credits are deducted immediately. Discount
   per prepaid month count t: `credit_discount_max * t / (t + 1)` (matches the server; 30-day months).
 
+## Templates
+
+- Tabs *My templates*, *Recommended* and *Search* (query syntax, e.g. `name=PyTorch`).
+- **Card view** like the vast.ai console (default; card / table toggle on the toolbar, default in Settings >
+  Appearance): a responsive grid with name, image:tag, tags (recommended, public/private, launch mode, recommended
+  disk, usage count), a two-line description (full text on hover) and *Select* (use for search / rent; the current
+  template shows *SELECTED* with a blue border), *Edit*, *Duplicate* and a menu (copy hash / image, delete).
+  Double-click a card to edit it; right-click for the same menu. Sort the cards by name or creation date,
+  ascending or descending (date sorts newest first by default; templates without a date go last).
+- Create / edit form: image, tag, login, launch mode, env vars, ports, docker options, search params, on-start
+  script, readme.
+
 ## Other pages
 
-**Templates, Storage, Serverless, Billing, Earnings, Members/Team, Audit Logs, Keys, Hosting, Activity log,
+**Storage, Serverless, Billing, Earnings, Members/Team, Audit Logs, Keys, Hosting, Activity log,
 Settings** - see the in-app pages. Every action logs the API request it sends (`> PUT /api/v0/...`, never the
 request body) in the Activity log.
 

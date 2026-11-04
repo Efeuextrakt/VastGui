@@ -182,6 +182,15 @@ TEST_SUITE("QueryBuilder") {
         CHECK(b["allocated_storage"].get<double>() == doctest::Approx(16.0));
         CHECK(b["disk_space"]["gte"] == "16");
 
+        // Like the console, offers are priced for at least the template's recommended disk.
+        f.templateDiskGb = 32.0;
+        CHECK(QueryBuilder::buildRestBody(f)["allocated_storage"].get<double>() == doctest::Approx(32.0));
+        CHECK(QueryBuilder::buildRestBody(f)["disk_space"]["gte"] == "32");
+        f.diskGb = 50.0;
+        CHECK(QueryBuilder::buildRestBody(f)["allocated_storage"].get<double>() == doctest::Approx(50.0));
+        f.diskGb = 16.0;
+        f.templateDiskGb.reset();
+
         f.showUnverified = true;
         CHECK_FALSE(QueryBuilder::buildRestBody(f).contains("verified"));
         f.rawQuery = "gpu_ram>=oops";

@@ -1,5 +1,50 @@
 # Changelog
 
+## 1.3.0 - 2026-11-04
+
+### Search
+- Prices now match the vast.ai web console. They were lower before because:
+  - the price only included storage for the *Disk Space* filter (16 GB by default); like the console, offers are
+    now priced (and filtered) for the larger of the filter and the template's recommended disk, and the filter
+    panel says so;
+  - interruptible offers showed the bare minimum bid; they now show the console's suggested bid (minimum bid +
+    5 % of the GPU price), which is also the default bid in the rent dialog;
+  - vast.ai's discounted total (`search.discountedTotalPerHour`), SLA premium and, with *Create new local
+    volume*, the new volume's cost are now included.
+
+  Sorting, TFLOPS/$/hr and DLP/$/hr use the same price; the price tooltip shows the breakdown.
+- Offers on machines you already rent have a blue border and a disabled *RENTED* button (table: blue row and
+  *RENTED*) instead of a *RENTED BY YOU* tag.
+- Defective offers shown on request are no longer dimmed; the *defective* tag has no icon (the table shows it in
+  the Status column).
+- The *INCOMPATIBLE* tag has no icon; in the table the GPU name is red instead.
+- Verification tags: unverified is yellow, deverified orange (was red).
+
+### Instances
+- New card view (default): one wide card per instance with status, name, GPU, machine, image / template, uptime,
+  SSH (copy), ports, GPU / CPU / VRAM / disk usage bars, current cost with breakdown, reserve badge, per-dollar
+  metrics, $/hr trend and the action icons. A checkbox per card (plus *Select all*) selects instances for the
+  toolbar's Start / Stop / Reboot / Destroy; selected cards have a blue border, outbid ones a red border.
+  Right-click a card for the full menu, double-click for the raw JSON. Sort by name, ID, status, GPU, $/hr or
+  uptime, up or down (default: name A-Z, unnamed last). Card / table toggle on the toolbar; the default view is in
+  Settings > Appearance.
+- *$/hr*, the header total and the $/hr sparkline show the current cost like the vast.ai console: the normal price
+  while running, only storage while an instance is stopped (the header total now includes stopped instances'
+  storage), and the reserved price only while prepaid credit is left on the instance. The tooltip shows the
+  breakdown and the normal price.
+
+### Templates
+- New card view like the vast.ai console (default): a responsive grid with name, image, tags, description and
+  *Select* / *Edit* / *Duplicate* / menu; the current template is marked *SELECTED*. Sort by name or date (up /
+  down) on the toolbar. Toggle card / table on the toolbar; the default view for Search and Templates is in
+  Settings > Appearance.
+
+### Build
+- `build.bat run` / `./build.sh run` builds and then launches the app (combinable: `debug run`, and on Windows
+  `msvc run`). It stops before building if the app is already running from the project folder, since the exe
+  can't be replaced while it runs.
+- `build.sh` accepts several options (e.g. `debug run`) and rejects unknown ones.
+
 ## 1.2.0 - 2026-11-03
 
 ### Search

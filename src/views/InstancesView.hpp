@@ -45,6 +45,13 @@ private:
 
     void drawToolbar(App& app);
     void drawTable(App& app);
+    void drawCards(App& app);
+    void drawCard(App& app, const Instance& i, double now, float height, float* measured);
+    [[nodiscard]] std::vector<const Instance*> visibleInstances(App& app);
+    bool drawEmpty(App& app);
+    void drawStatusBadge(App& app, const Instance& i, double now);
+    void drawReserveBadge(const Instance& i, double now);
+    void drawActions(App& app, const Instance& i);
     void drawRowMenu(App& app, const Instance& inst);
     void drawDialogs(App& app);
     void openDialog(Dialog d, const Instance& inst);
@@ -55,6 +62,7 @@ private:
     std::string filter_;
     int statusFilter_ = 0;
     bool tableColumnsApplied_ = false;
+    float cardHeight_ = 0.0f;  // measured card content height (0 = not measured yet)
 
     Dialog dialog_ = Dialog::None;
     bool openPopup_ = false;

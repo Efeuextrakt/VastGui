@@ -59,6 +59,32 @@ std::optional<double> cpuPercent(const Instance& i) {
     return std::min(v, 100.0);
 }
 
+// Breakdown of an instance's current cost (what it is billed right now, not its list price).
+void drawCostTooltip(const Instance& i, const CurrencyFormat& c) {
+    if (!ImGui::BeginTooltip()) return;
+    ImGui::TextUnformatted("Current cost");
+    ImGui::Separator();
+    auto row = [&](const char* k, const std::string& v) {
+        ui::TextDim(k);
+        ImGui::SameLine(ImGui::GetFontSize() * 10.0f);
+        ImGui::TextUnformatted(v.c_str());
+    };
+    const bool running = i.status() == "running";
+    if (i.costGpuHr) row(running ? "GPU" : "GPU (not billed)", fmt::money(*i.costGpuHr, c, 4) + "/hr");
+    if (i.costDiskHr) row("Storage", fmt::money(*i.costDiskHr, c, 4) + "/hr");
+    if (i.costListHr && i.costNowHr && *i.costListHr - *i.costNowHr > 1e-6) {
+        row("Reserved discount", "-" + fmt::money(*i.costListHr - *i.costNowHr, c, 4) + "/hr");
+    }
+    ImGui::Separator();
+    row("Total", fmt::money(i.costNowHr, c, 4) + "/hr");
+    if (!running) ui::TextDim("Not running: only the storage is billed.");
+    if (i.dphTotal && (!i.costNowHr || std::abs(*i.dphTotal - *i.costNowHr) > 1e-6)) {
+        ui::TextDim(std::format("Normal price while running: {}/hr", fmt::money(i.dphTotal, c, 4)).c_str());
+    }
+    ui::TextDim("Bandwidth is billed separately.");
+    ImGui::EndTooltip();
+}
+
 // Reserve plans (kReservePlanMonths) the instance can buy: the host must offer a discount and the plan must end
 // before the offer's end date (unknown end date: all plans).
 std::vector<ReservedPlan> reservePlans(const Instance& i, double nowEpoch) {
@@ -140,6 +166,76 @@ void usageBar(std::optional<double> used, std::optional<double> total, const cha
     ImGui::PushStyleColor(ImGuiCol_PlotHistogram, frac > 0.9f ? ui::palette().danger : ui::palette().accent);
     ImGui::ProgressBar(frac, ImVec2(-FLT_MIN, 0), overlay.c_str());
     ImGui::PopStyleColor();
+}
+
+std::pair<double, std::string> instanceSortKey(const Instance& i, int col, double now, const json& user) {
+    switch (col) {
+        case ICId: return {static_cast<double>(i.id), {}};
+        case ICLabel: return {0, i.label};
+        case ICStatus: return {0, i.consoleStatus(now, user).label};
+        case ICGpu: return {0, i.gpuName};
+        case ICImage: return {0, i.image};
+        case ICPrice: return {i.costNowHr.value_or(0), {}};
+        case ICTflopsPerDollar: return {safeRatio(i.totalFlops, i.dphTotal).value_or(-1), {}};
+        case ICDlpPerDollar: return {safeRatio(i.dlperf, i.dphTotal).value_or(-1), {}};
+        case ICReserve: return {reserveBadge(i, now).sortValue, {}};
+        case ICUptime: return {i.startDate.value_or(0) > 0 ? now - *i.startDate : 0, {}};
+        case ICSsh: return {0, i.sshUrl()};
+        case ICPorts: return {0, i.portsSummary()};
+        case ICGpuUtil: return {i.gpuUtil.value_or(0), {}};
+        case ICCpuUtil: return {cpuPercent(i).value_or(0), {}};
+        case ICVram: return {i.vmemUsage.value_or(0), {}};
+        case ICDisk: return {i.diskUsage.value_or(0), {}};
+        default: return {0, {}};
+    }
+}
+
+// Card view sort options (id saved in VastGui.json -> table column used for the sort key).
+struct CardSort {
+    const char* id;
+    const char* label;
+    int column;
+};
+constexpr CardSort kCardSorts[] = {{"label", "Name", ICLabel}, {"id", "ID", ICId},          {"status", "Status", ICStatus},
+                                   {"gpu", "GPU", ICGpu},       {"price", "$/hr", ICPrice}, {"uptime", "Uptime", ICUptime}};
+
+const CardSort& cardSort(const std::string& id) {
+    for (const auto& c : kCardSorts) {
+        if (id == c.id) return c;
+    }
+    return kCardSorts[0];
+}
+
+// ImPlot $/hr sparkline of the samples collected since app start.
+void spendSparkline(App& app, const Instance& i, const ImVec2& size) {
+    const auto* hist = app.costHistory(i.id);
+    if (!hist || hist->size() < 2) {
+        ImGui::TextDisabled("collecting");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("$/hr trend: samples are collected on every refresh");
+        return;
+    }
+    std::vector<double> xs, ys;
+    double spent = 0;
+    for (std::size_t k = 0; k < hist->size(); ++k) {
+        xs.push_back((*hist)[k].first);
+        ys.push_back((*hist)[k].second);
+        if (k > 0) spent += (*hist)[k - 1].second * ((*hist)[k].first - (*hist)[k - 1].first) / 3600.0;
+    }
+    ImPlot::PushStyleVar(ImPlotStyleVar_PlotPadding, ImVec2(0, 0));
+    if (ImPlot::BeginPlot("##spark", size, ImPlotFlags_CanvasOnly | ImPlotFlags_NoInputs)) {
+        ImPlot::SetupAxes(nullptr, nullptr, ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_AutoFit,
+                          ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_AutoFit);
+        ImPlotSpec spec;
+        spec.LineColor = ui::palette().accent;
+        spec.LineWeight = 1.5f;
+        ImPlot::PlotLine("$/hr", xs.data(), ys.data(), static_cast<int>(xs.size()), spec);
+        ImPlot::EndPlot();
+    }
+    ImPlot::PopStyleVar();
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("$/hr samples since app start\nEstimated spend in this session: %s",
+                          fmt::money(spent, app.settings().currency, 4).c_str());
+    }
 }
 
 std::string envFromInstance(const json& raw) {
@@ -242,7 +338,11 @@ void InstancesView::fetchLogs(App& app, LogWindow& w, int tab) {
 
 void InstancesView::draw(App& app) {
     drawToolbar(app);
-    drawTable(app);
+    if (app.settings().instanceCardView) {
+        drawCards(app);
+    } else {
+        drawTable(app);
+    }
     drawDialogs(app);
 }
 
@@ -254,10 +354,8 @@ void InstancesView::drawToolbar(App& app) {
     const double now = fmt::nowEpoch();
     for (const auto& i : list) {
         if (i.consoleStatus(now, app.user()).outbid) ++outbid;
-        if (i.status() == "running") {
-            ++running;
-            burn += i.dphTotal.value_or(0.0);
-        }
+        if (i.status() == "running") ++running;
+        burn += i.costNowHr.value_or(0.0);  // includes the storage of stopped instances
     }
     const std::string outbidText = outbid > 0 ? std::format(", {} outbid", outbid) : std::string{};
     ui::PageHeader(ICON_FA_SERVER, "Instances",
@@ -293,13 +391,57 @@ void InstancesView::drawToolbar(App& app) {
     ImGui::SameLine();
     ImGui::SetNextItemWidth(ImGui::GetFontSize() * 8);
     ImGui::Combo("##statusfilter", &statusFilter_, kStatusFilters, IM_ARRAYSIZE(kStatusFilters));
+    // Right-aligned: sort (card view) + card / table toggle.
+    Settings& st = app.settings();
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const char* sortIcon = st.instanceSortDesc ? ICON_FA_ARROW_DOWN_WIDE_SHORT : ICON_FA_ARROW_UP_WIDE_SHORT;
+    const float comboW = ImGui::GetFontSize() * 7.5f;
+    const float toggleW = ImGui::CalcTextSize(ICON_FA_GRIP).x + ImGui::CalcTextSize(ICON_FA_TABLE_LIST).x + style.FramePadding.x * 4.0f;
+    const float sortW = st.instanceCardView
+                            ? comboW + ImGui::CalcTextSize(sortIcon).x + style.FramePadding.x * 2.0f + style.ItemSpacing.x * 2.5f
+                            : 0.0f;
+    const float rightX = ImGui::GetContentRegionMax().x - toggleW - sortW;
     if (!app.instancesError().empty()) {
-        // Same line as the toolbar so a failing refresh never pushes the table down.
+        // Same line as the toolbar so a failing refresh never pushes the list down.
         ImGui::SameLine();
-        std::string e = app.instancesError();
-        if (e.size() > 70) e = e.substr(0, 67) + "...";
-        ui::TextWithColor(ui::palette().danger, (ICON_FA_CIRCLE_XMARK " " + e).c_str());
+        const float maxW = rightX - ImGui::GetCursorPosX() - style.ItemSpacing.x;
+        std::string e = ICON_FA_CIRCLE_XMARK " " + app.instancesError();
+        if (const auto nl = e.find('\n'); nl != std::string::npos) e.resize(nl);
+        e = ui::Ellipsize(e, maxW);
+        ImGui::AlignTextToFramePadding();
+        ui::TextWithColor(ui::palette().danger, e.c_str());
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", app.instancesError().c_str());
+    }
+    ImGui::SameLine(std::max(ImGui::GetCursorPosX(), rightX));
+    if (st.instanceCardView) {
+        const CardSort& cur = cardSort(st.instanceSort);
+        ImGui::SetNextItemWidth(comboW);
+        if (ImGui::BeginCombo("##instsort", (std::string(ICON_FA_ARROW_DOWN_WIDE_SHORT "  ") + cur.label).c_str())) {
+            for (const auto& c : kCardSorts) {
+                if (ImGui::Selectable(c.label, &c == &cur)) {
+                    st.instanceSort = c.id;
+                    app.markSettingsDirty();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Sort the instance cards");
+        ImGui::SameLine(0, style.ItemSpacing.x * 0.5f);
+        if (ui::IconButton(sortIcon, st.instanceSortDesc ? "Descending (click for ascending)" : "Ascending (click for descending)")) {
+            st.instanceSortDesc = !st.instanceSortDesc;
+            app.markSettingsDirty();
+        }
+        ImGui::SameLine();
+    }
+    const ImVec4 on = ui::palette().accent;
+    if (ui::IconButton(ICON_FA_GRIP, "Card view", st.instanceCardView ? &on : nullptr)) {
+        st.instanceCardView = true;
+        app.markSettingsDirty();
+    }
+    ImGui::SameLine(0, 0);
+    if (ui::IconButton(ICON_FA_TABLE_LIST, "Table view", !st.instanceCardView ? &on : nullptr)) {
+        st.instanceCardView = false;
+        app.markSettingsDirty();
     }
 }
 
@@ -360,13 +502,9 @@ void InstancesView::drawRowMenu(App& app, const Instance& inst) {
     }
 }
 
-void InstancesView::drawTable(App& app) {
-    Settings& st = app.settings();
-    const ui::Palette& p = ui::palette();
+std::vector<const Instance*> InstancesView::visibleInstances(App& app) {
     const auto& list = app.instances();
     const double now = fmt::nowEpoch();
-    const float s = app.dpiScale() * st.uiScale;
-
     std::vector<const Instance*> rows;
     for (const auto& i : list) {
         const std::string status = i.consoleStatus(now, app.user()).label;
@@ -383,13 +521,289 @@ void InstancesView::drawTable(App& app) {
     std::erase_if(selected_, [&](std::int64_t id) {
         return std::none_of(list.begin(), list.end(), [&](const Instance& i) { return i.id == id; });
     });
+    return rows;
+}
 
-    if (list.empty()) {
-        ImGui::Spacing();
-        ui::TextDim(app.instancesLoading() ? "Loading instances..." : "No instances. Rent one from the Search page.");
-        if (!app.instancesLoading() && ImGui::Button(ICON_FA_MAGNIFYING_GLASS "  Go to Search")) app.navigate(Page::Search);
-        return;
+bool InstancesView::drawEmpty(App& app) {
+    if (!app.instances().empty()) return false;
+    ImGui::Spacing();
+    ui::TextDim(app.instancesLoading() ? "Loading instances..." : "No instances. Rent one from the Search page.");
+    if (!app.instancesLoading() && ImGui::Button(ICON_FA_MAGNIFYING_GLASS "  Go to Search")) app.navigate(Page::Search);
+    return true;
+}
+
+void InstancesView::drawStatusBadge(App& app, const Instance& i, double now) {
+    const InstanceStatus cs = i.consoleStatus(now, app.user());
+    std::string tip = cs.help;
+    if (!i.statusMsg.empty()) tip += (tip.empty() ? "" : "\n\n") + i.statusMsg;
+    if (cs.outbid) {
+        const CurrencyFormat& cur = app.settings().currency;
+        tip += std::format("\n\nYour bid: {}/hr, current minimum bid: {}/hr.\nClick to change the bid.",
+                           fmt::money(i.dphTotal, cur), fmt::money(i.minBid, cur));
+        if (ui::Badge("outbid", ui::palette().danger, true, tip.c_str())) openDialog(Dialog::ChangeBid, i);
+    } else {
+        ui::Badge(cs.label.c_str(), ui::statusColor(cs.label), false, tip.empty() ? nullptr : tip.c_str());
     }
+}
+
+void InstancesView::drawReserveBadge(const Instance& i, double now) {
+    const ui::Palette& p = ui::palette();
+    const ReserveBadge b = reserveBadge(i, now);
+    if (!b.text.empty()) {
+        if (ui::Badge(b.text.c_str(), b.active ? p.success : p.accent, false, b.tooltip.c_str()) && b.clickable) {
+            openDialog(Dialog::Prepay, i);
+        }
+    } else {
+        ImGui::TextDisabled("%s", kMissing);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", b.tooltip.c_str());
+    }
+}
+
+void InstancesView::drawActions(App& app, const Instance& i) {
+    const bool isRunning = i.status() == "running" || i.status() == "loading";
+    if (isRunning) {
+        if (ui::IconButton(ICON_FA_STOP, "Stop")) {
+            app.run(cmd::stopInstances({i.id}), [&app](const ApiResult&) { app.refreshInstances(); }, "Stop requested");
+        }
+    } else if (ui::IconButton(ICON_FA_PLAY, "Start")) {
+        app.run(cmd::startInstances({i.id}), [&app](const ApiResult&) { app.refreshInstances(); }, "Start requested");
+    }
+    ImGui::SameLine(0, 2);
+    if (ui::IconButton(ICON_FA_FILE_LINES, "Logs")) openLogs(app, i.id);
+    ImGui::SameLine(0, 2);
+    if (ui::IconButton(ICON_FA_TERMINAL, "Copy SSH command")) {
+        const std::string ssh = i.sshCommand();
+        if (!ssh.empty()) {
+            ImGui::SetClipboardText(ssh.c_str());
+            app.toasts().info("SSH command copied", ssh);
+        }
+    }
+    ImGui::SameLine(0, 2);
+    {
+        // Always rendered (disabled when unavailable) so the action icons line up across rows.
+        const auto jup = i.jupyterUrl();
+        ImGui::BeginDisabled(!jup.has_value());
+        if (ui::IconButton(ICON_FA_ARROW_UP_RIGHT_FROM_SQUARE, "Open Jupyter") && jup) platform::openUrl(*jup);
+        ImGui::EndDisabled();
+    }
+    ImGui::SameLine(0, 2);
+    {
+        const bool listed = i.machineId && app.settings().blacklist.machines.contains(*i.machineId);
+        const ImVec4 danger = ui::palette().danger;
+        const std::string tip = !i.machineId ? std::string("No machine ID")
+                                : listed ? std::format("Machine {} is blacklisted - click to remove", *i.machineId)
+                                         : std::format("Blacklist machine {} (treat its offers as defective)", *i.machineId);
+        ImGui::BeginDisabled(!i.machineId.has_value());
+        if (ui::IconButton(ICON_FA_BAN, tip.c_str(), listed ? &danger : nullptr)) toggleMachineBlacklist(app, i);
+        ImGui::EndDisabled();
+    }
+    ImGui::SameLine(0, 2);
+    if (ui::IconButton(ICON_FA_BARS, "More actions")) ImGui::OpenPopup("##instmenu");
+    if (ImGui::BeginPopup("##instmenu")) {
+        drawRowMenu(app, i);
+        ImGui::EndPopup();
+    }
+}
+
+void InstancesView::drawCards(App& app) {
+    const Settings& st = app.settings();
+    const double now = fmt::nowEpoch();
+    std::vector<const Instance*> rows = visibleInstances(app);
+    if (drawEmpty(app)) return;
+
+    const CardSort& sort = cardSort(st.instanceSort);
+    const bool desc = st.instanceSortDesc;
+    const json& user = app.user();
+    std::stable_sort(rows.begin(), rows.end(), [&](const Instance* a, const Instance* b) {
+        if (sort.column == ICLabel && a->label.empty() != b->label.empty()) return b->label.empty();  // unnamed last
+        auto ka = instanceSortKey(*a, sort.column, now, user);
+        auto kb = instanceSortKey(*b, sort.column, now, user);
+        ka.second = fmt::toLower(ka.second);
+        kb.second = fmt::toLower(kb.second);
+        if (ka != kb) return desc ? ka > kb : ka < kb;
+        return a->id < b->id;
+    });
+
+    // Select-all for the card view (the table has it in its header).
+    {
+        bool all = !rows.empty() && std::all_of(rows.begin(), rows.end(), [&](const Instance* i) { return selected_.contains(i->id); });
+        if (ImGui::Checkbox("Select all", &all)) {
+            for (const Instance* i : rows) {
+                if (all) {
+                    selected_.insert(i->id);
+                } else {
+                    selected_.erase(i->id);
+                }
+            }
+        }
+        ImGui::SameLine();
+        ImGui::AlignTextToFramePadding();
+        ui::TextDim(std::format("{} shown", rows.size()).c_str());
+    }
+
+    ImGui::BeginChild("##instcards", ImVec2(0, 0), ImGuiChildFlags_None);
+    float measured = 0.0f;
+    const float height = cardHeight_ > 0.0f
+                             ? cardHeight_
+                             : ImGui::GetTextLineHeightWithSpacing() * 6.0f + ImGui::GetStyle().WindowPadding.y * 2.0f;
+    ImGuiListClipper clipper;
+    clipper.Begin(static_cast<int>(rows.size()), height + ImGui::GetStyle().ItemSpacing.y);
+    while (clipper.Step()) {
+        for (int k = clipper.DisplayStart; k < clipper.DisplayEnd; ++k) {
+            drawCard(app, *rows[static_cast<std::size_t>(k)], now, height, &measured);
+        }
+    }
+    ImGui::EndChild();
+    // Cards share one height (for clipping): the measured content height of last frame's cards.
+    if (measured > 0.0f) cardHeight_ = std::ceil(measured);
+}
+
+void InstancesView::drawCard(App& app, const Instance& i, double now, float height, float* measured) {
+    const ui::Palette& p = ui::palette();
+    const Settings& st = app.settings();
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const bool selected = selected_.contains(i.id);
+    const bool outbid = i.consoleStatus(now, app.user()).outbid;
+
+    ImGui::PushID(static_cast<int>(i.id));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, p.card);
+    const ImVec4 border = selected ? p.info : outbid ? ImVec4(p.danger.x, p.danger.y, p.danger.z, 0.6f) : p.border;
+    ImGui::PushStyleColor(ImGuiCol_Border, border);
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize,
+                        selected ? std::max(1.5f, style.ChildBorderSize * 1.5f) : style.ChildBorderSize);
+    ImGui::BeginChild("##icard", ImVec2(0, height), ImGuiChildFlags_Borders,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows)) {
+        const ImVec2 wp = ImGui::GetWindowPos();
+        const ImVec2 ws = ImGui::GetWindowSize();
+        ImGui::GetWindowDrawList()->AddRectFilled(wp, ImVec2(wp.x + ws.x, wp.y + ws.y), ui::col(p.accent, 0.05f), 8.0f);
+    }
+
+    const ImGuiTableFlags tf = ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_BordersInnerV;
+    if (ImGui::BeginTable("##cols", 4, tf)) {
+        ImGui::TableSetupColumn("id", ImGuiTableColumnFlags_WidthStretch, 1.15f);
+        ImGui::TableSetupColumn("img", ImGuiTableColumnFlags_WidthStretch, 1.45f);
+        ImGui::TableSetupColumn("use", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+        ImGui::TableSetupColumn("price", ImGuiTableColumnFlags_WidthStretch, 1.05f);
+        ImGui::TableNextRow();
+
+        // Left: selection, status, name, GPU, machine.
+        ImGui::TableSetColumnIndex(0);
+        bool sel = selected;
+        if (ImGui::Checkbox("##sel", &sel)) {
+            if (sel) {
+                selected_.insert(i.id);
+            } else {
+                selected_.erase(i.id);
+            }
+        }
+        ImGui::SameLine();
+        drawStatusBadge(app, i, now);
+        ImGui::SameLine();
+        ui::TextDim(std::format("#{}", i.id).c_str());
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Instance ID (double-click the card for the raw JSON)");
+        const float colW = ImGui::GetContentRegionAvail().x;
+        if (i.label.empty()) {
+            ui::TextDim("(no name)");
+        } else {
+            ImGui::TextUnformatted(ui::Ellipsize(i.label, colW).c_str());
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Name (label) - change it from the menu");
+        ImGui::PushFont(nullptr, style.FontSizeBase * 1.45f);
+        ImGui::Text("%dx %s", i.numGpus, i.gpuName.c_str());
+        ImGui::PopFont();
+        ui::TextDim(std::format("m:{}  host:{}", i.machineId.value_or(0), i.hostId.value_or(0)).c_str());
+        ui::TextDim(ui::Ellipsize(i.geolocation.empty() ? std::string(kMissing) : i.geolocation, colW).c_str());
+
+        // Middle: image, template, uptime, SSH, ports.
+        ImGui::TableSetColumnIndex(1);
+        const float midW = ImGui::GetContentRegionAvail().x;
+        const float textX = ImGui::GetCursorPosX() + ImGui::GetFontSize() * 1.6f;
+        auto iconRow = [&](const char* icon, const std::string& text, const char* tip) {
+            ui::TextDim(icon);
+            ImGui::SameLine();
+            ImGui::SetCursorPosX(textX);
+            ImGui::TextUnformatted(ui::Ellipsize(text, midW - ImGui::GetFontSize() * 1.6f).c_str());
+            if (tip && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tip);
+        };
+        iconRow(ICON_FA_BOX, i.image.empty() ? std::string(kMissing) : i.image, i.image.c_str());
+        iconRow(ICON_FA_LAYER_GROUP, i.templateName.empty() ? std::string("no template") : i.templateName, "Template");
+        const auto up = i.uptimeHours(now);
+        iconRow(ICON_FA_CLOCK, up ? "up " + fmt::humanDuration(*up * 3600.0) : std::string(kMissing), "Uptime");
+        {
+            const std::string ssh = i.sshUrl();
+            ui::TextDim(ICON_FA_TERMINAL);
+            ImGui::SameLine();
+            ImGui::SetCursorPosX(textX);
+            if (ssh.size() <= 6) {
+                ImGui::TextDisabled("%s", kMissing);
+            } else {
+                ui::CopyIcon("##sshcopy", i.sshCommand());
+                ImGui::SameLine();
+                ImGui::TextUnformatted(ui::Ellipsize(ssh.substr(6), midW - ImGui::GetFontSize() * 3.4f).c_str());
+            }
+        }
+        const std::string ports = i.portsSummary();
+        iconRow(ICON_FA_NETWORK_WIRED, ports.empty() ? std::string("no ports") : ports, ports.empty() ? nullptr : ports.c_str());
+
+        // Usage bars.
+        ImGui::TableSetColumnIndex(2);
+        const float barX = ImGui::GetCursorPosX() + ImGui::CalcTextSize("VRAM").x + style.ItemSpacing.x;
+        auto bar = [&](const char* label, std::optional<double> used, std::optional<double> total, const char* unit) {
+            ImGui::AlignTextToFramePadding();
+            ui::TextDim(label);
+            ImGui::SameLine();
+            ImGui::SetCursorPosX(barX);
+            usageBar(used, total, unit);
+        };
+        bar("GPU", i.gpuUtil, 100.0, "%");
+        bar("CPU", cpuPercent(i), 100.0, "%");
+        bar("VRAM", i.vmemUsage, i.gpuRamMb ? std::optional<double>(*i.gpuRamMb / 1024.0) : std::nullopt, "G");
+        bar("Disk", i.diskUsage, i.diskSpace, "G");
+
+        // Right: cost, reserve, per-dollar metrics, trend, actions.
+        ImGui::TableSetColumnIndex(3);
+        ImGui::PushFont(nullptr, style.FontSizeBase * 1.5f);
+        ImGui::TextUnformatted((fmt::money(i.costNowHr, st.currency) + "/hr").c_str());
+        ImGui::PopFont();
+        if (ImGui::IsItemHovered()) drawCostTooltip(i, st.currency);
+        ImGui::SameLine();
+        drawReserveBadge(i, now);
+        ui::TextDim(std::format("TFLOPS/$/hr {}   DLP/$/hr {}", formatMetric(safeRatio(i.totalFlops, i.dphTotal), 1),
+                                formatMetric(safeRatio(i.dlperf, i.dphTotal), 1))
+                        .c_str());
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Per $/hr of the normal running price - higher is better");
+        spendSparkline(app, i, ImVec2(-FLT_MIN, ImGui::GetFrameHeight()));
+        drawActions(app, i);
+        ImGui::EndTable();
+    }
+    if (measured) {
+        // Content height in this child (cursor started at WindowPadding.y) plus the bottom padding.
+        const float h = ImGui::GetCursorPosY() - style.ItemSpacing.y + style.WindowPadding.y;
+        *measured = std::max(*measured, h);
+    }
+    if (ImGui::BeginPopupContextWindow("##instcardctx")) {
+        drawRowMenu(app, i);
+        ImGui::EndPopup();
+    }
+    if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) && !ImGui::IsAnyItemHovered() &&
+        ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+        openDialog(Dialog::Json, i);
+    }
+    ImGui::EndChild();
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(2);
+    ImGui::PopID();
+}
+
+void InstancesView::drawTable(App& app) {
+    Settings& st = app.settings();
+    const double now = fmt::nowEpoch();
+    const float s = app.dpiScale() * st.uiScale;
+
+    std::vector<const Instance*> rows = visibleInstances(app);
+    if (drawEmpty(app)) return;
 
     const ImGuiTableFlags flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable |
                                   ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_PadOuterX | ImGuiTableFlags_BordersInnerV |
@@ -453,30 +867,9 @@ void InstancesView::drawTable(App& app) {
     if (ImGuiTableSortSpecs* specs = ImGui::TableGetSortSpecs(); specs && specs->SpecsCount > 0) {
         const int c = specs->Specs[0].ColumnIndex;
         const bool desc = specs->Specs[0].SortDirection == ImGuiSortDirection_Descending;
-        auto key = [&](const Instance* i) -> std::pair<double, std::string> {
-            switch (c) {
-                case ICId: return {static_cast<double>(i->id), {}};
-                case ICLabel: return {0, i->label};
-                case ICStatus: return {0, i->consoleStatus(now, app.user()).label};
-                case ICGpu: return {0, i->gpuName};
-                case ICImage: return {0, i->image};
-                case ICPrice: return {i->dphTotal.value_or(0), {}};
-                case ICTflopsPerDollar: return {safeRatio(i->totalFlops, i->dphTotal).value_or(-1), {}};
-                case ICDlpPerDollar: return {safeRatio(i->dlperf, i->dphTotal).value_or(-1), {}};
-                case ICReserve: return {reserveBadge(*i, now).sortValue, {}};
-                case ICUptime: return {i->startDate.value_or(0) > 0 ? now - *i->startDate : 0, {}};
-                case ICSsh: return {0, i->sshUrl()};
-                case ICPorts: return {0, i->portsSummary()};
-                case ICGpuUtil: return {i->gpuUtil.value_or(0), {}};
-                case ICCpuUtil: return {cpuPercent(*i).value_or(0), {}};
-                case ICVram: return {i->vmemUsage.value_or(0), {}};
-                case ICDisk: return {i->diskUsage.value_or(0), {}};
-                default: return {0, {}};
-            }
-        };
         std::stable_sort(rows.begin(), rows.end(), [&](const Instance* a, const Instance* b) {
-            const auto ka = key(a);
-            const auto kb = key(b);
+            const auto ka = instanceSortKey(*a, c, now, app.user());
+            const auto kb = instanceSortKey(*b, c, now, app.user());
             return desc ? ka > kb : ka < kb;
         });
     }
@@ -508,25 +901,16 @@ void InstancesView::drawTable(App& app) {
                     if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) openDialog(Dialog::Json, i);
                     break;
                 case ICLabel: ImGui::TextUnformatted(i.label.empty() ? "-" : i.label.c_str()); break;
-                case ICStatus: {
-                    const InstanceStatus cs = i.consoleStatus(now, app.user());
-                    std::string tip = cs.help;
-                    if (!i.statusMsg.empty()) tip += (tip.empty() ? "" : "\n\n") + i.statusMsg;
-                    if (cs.outbid) {
-                        tip += std::format("\n\nYour bid: {}/hr, current minimum bid: {}/hr.\nClick to change the bid.",
-                                           fmt::money(i.dphTotal, st.currency), fmt::money(i.minBid, st.currency));
-                        if (ui::Badge("outbid", p.danger, true, tip.c_str())) openDialog(Dialog::ChangeBid, i);
-                    } else {
-                        ui::Badge(cs.label.c_str(), ui::statusColor(cs.label), false, tip.empty() ? nullptr : tip.c_str());
-                    }
-                    break;
-                }
+                case ICStatus: drawStatusBadge(app, i, now); break;
                 case ICGpu: ImGui::Text("%dx %s", i.numGpus, i.gpuName.c_str()); break;
                 case ICImage:
                     ImGui::TextUnformatted(i.image.c_str());
                     if (ImGui::IsItemHovered() && !i.templateName.empty()) ImGui::SetTooltip("Template: %s", i.templateName.c_str());
                     break;
-                case ICPrice: ImGui::TextUnformatted(fmt::money(i.dphTotal, st.currency).c_str()); break;
+                case ICPrice:
+                    ImGui::TextUnformatted(fmt::money(i.costNowHr, st.currency).c_str());
+                    if (ImGui::IsItemHovered()) drawCostTooltip(i, st.currency);
+                    break;
                 case ICTflopsPerDollar:
                 case ICDlpPerDollar: {
                     const bool tf = c == ICTflopsPerDollar;
@@ -536,18 +920,7 @@ void InstancesView::drawTable(App& app) {
                     }
                     break;
                 }
-                case ICReserve: {
-                    const ReserveBadge b = reserveBadge(i, now);
-                    if (!b.text.empty()) {
-                        if (ui::Badge(b.text.c_str(), b.active ? p.success : p.accent, false, b.tooltip.c_str()) && b.clickable) {
-                            openDialog(Dialog::Prepay, i);
-                        }
-                    } else {
-                        ImGui::TextDisabled("%s", kMissing);
-                        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", b.tooltip.c_str());
-                    }
-                    break;
-                }
+                case ICReserve: drawReserveBadge(i, now); break;
                 case ICUptime: {
                     const auto h = i.uptimeHours(now);
                     ImGui::TextUnformatted(h ? fmt::humanDuration(*h * 3600.0).c_str() : kMissing);
@@ -569,83 +942,8 @@ void InstancesView::drawTable(App& app) {
                 case ICCpuUtil: usageBar(cpuPercent(i), 100.0, "%"); break;
                 case ICVram: usageBar(i.vmemUsage, i.gpuRamMb ? std::optional<double>(*i.gpuRamMb / 1024.0) : std::nullopt, "G"); break;
                 case ICDisk: usageBar(i.diskUsage, i.diskSpace, "G"); break;
-                case ICSpend: {
-                    const auto* hist = app.costHistory(i.id);
-                    if (!hist || hist->size() < 2) {
-                        ImGui::TextDisabled("collecting");
-                        break;
-                    }
-                    std::vector<double> xs, ys;
-                    double spent = 0;
-                    for (std::size_t k = 0; k < hist->size(); ++k) {
-                        xs.push_back((*hist)[k].first);
-                        ys.push_back((*hist)[k].second);
-                        if (k > 0) spent += (*hist)[k - 1].second * ((*hist)[k].first - (*hist)[k - 1].first) / 3600.0;
-                    }
-                    ImPlot::PushStyleVar(ImPlotStyleVar_PlotPadding, ImVec2(0, 0));
-                    if (ImPlot::BeginPlot("##spark", ImVec2(-FLT_MIN, ImGui::GetFrameHeight()),
-                                          ImPlotFlags_CanvasOnly | ImPlotFlags_NoInputs)) {
-                        ImPlot::SetupAxes(nullptr, nullptr, ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_AutoFit,
-                                          ImPlotAxisFlags_NoDecorations | ImPlotAxisFlags_AutoFit);
-                        ImPlotSpec spec;
-                        spec.LineColor = p.accent;
-                        spec.LineWeight = 1.5f;
-                        ImPlot::PlotLine("$/hr", xs.data(), ys.data(), static_cast<int>(xs.size()), spec);
-                        ImPlot::EndPlot();
-                    }
-                    ImPlot::PopStyleVar();
-                    if (ImGui::IsItemHovered()) {
-                        ImGui::SetTooltip("$/hr samples since app start\nEstimated spend in this session: %s",
-                                          fmt::money(spent, st.currency, 4).c_str());
-                    }
-                    break;
-                }
-                case ICActions: {
-                    const bool isRunning = i.status() == "running" || i.status() == "loading";
-                    if (isRunning) {
-                        if (ui::IconButton(ICON_FA_STOP, "Stop")) {
-                            app.run(cmd::stopInstances({i.id}), [&app](const ApiResult&) { app.refreshInstances(); }, "Stop requested");
-                        }
-                    } else if (ui::IconButton(ICON_FA_PLAY, "Start")) {
-                        app.run(cmd::startInstances({i.id}), [&app](const ApiResult&) { app.refreshInstances(); }, "Start requested");
-                    }
-                    ImGui::SameLine(0, 2);
-                    if (ui::IconButton(ICON_FA_FILE_LINES, "Logs")) openLogs(app, i.id);
-                    ImGui::SameLine(0, 2);
-                    if (ui::IconButton(ICON_FA_TERMINAL, "Copy SSH command")) {
-                        const std::string ssh = i.sshCommand();
-                        if (!ssh.empty()) {
-                            ImGui::SetClipboardText(ssh.c_str());
-                            app.toasts().info("SSH command copied", ssh);
-                        }
-                    }
-                    ImGui::SameLine(0, 2);
-                    {
-                        // Always rendered (disabled when unavailable) so the action icons line up across rows.
-                        const auto jup = i.jupyterUrl();
-                        ImGui::BeginDisabled(!jup.has_value());
-                        if (ui::IconButton(ICON_FA_ARROW_UP_RIGHT_FROM_SQUARE, "Open Jupyter") && jup) platform::openUrl(*jup);
-                        ImGui::EndDisabled();
-                    }
-                    ImGui::SameLine(0, 2);
-                    {
-                        const bool listed = i.machineId && app.settings().blacklist.machines.contains(*i.machineId);
-                        const ImVec4 danger = ui::palette().danger;
-                        const std::string tip = !i.machineId ? std::string("No machine ID")
-                                                : listed ? std::format("Machine {} is blacklisted - click to remove", *i.machineId)
-                                                         : std::format("Blacklist machine {} (treat its offers as defective)", *i.machineId);
-                        ImGui::BeginDisabled(!i.machineId.has_value());
-                        if (ui::IconButton(ICON_FA_BAN, tip.c_str(), listed ? &danger : nullptr)) toggleMachineBlacklist(app, i);
-                        ImGui::EndDisabled();
-                    }
-                    ImGui::SameLine(0, 2);
-                    if (ui::IconButton(ICON_FA_BARS, "More actions")) ImGui::OpenPopup("##instmenu");
-                    if (ImGui::BeginPopup("##instmenu")) {
-                        drawRowMenu(app, i);
-                        ImGui::EndPopup();
-                    }
-                    break;
-                }
+                case ICSpend: spendSparkline(app, i, ImVec2(-FLT_MIN, ImGui::GetFrameHeight())); break;
+                case ICActions: drawActions(app, i); break;
                 default: break;
             }
         }

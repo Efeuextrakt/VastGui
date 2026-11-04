@@ -178,7 +178,7 @@ std::string QueryBuilder::buildQueryString(const SearchFilters& f) {
 
     if (f.secureCloudOnly) add("datacenter=true");
 
-    double diskMin = f.diskGb;
+    double diskMin = f.effectiveDiskGb();
     if (const auto& r = f.range(RangeField::DiskSpace); r.min) diskMin = std::max(diskMin, *r.min);
     if (diskMin > 0) add("disk_space>=" + formatNumber(diskMin));
 
@@ -232,7 +232,7 @@ json QueryBuilder::buildRestBody(const SearchFilters& f) {
     q["order"] = json::array({json::array({field, desc ? "desc" : "asc"})});
     q["type"] = rentalTypeCliName(f.rentalType);
     q["limit"] = f.limit;
-    q["allocated_storage"] = f.diskGb;
+    q["allocated_storage"] = f.effectiveDiskGb();
     return q;
 }
 

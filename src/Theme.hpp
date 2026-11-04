@@ -21,6 +21,7 @@ struct Palette {
     ImVec4 accentHover;
     ImVec4 success;
     ImVec4 warning;
+    ImVec4 caution;  // yellow
     ImVec4 danger;
     ImVec4 info;
     bool dark = true;
@@ -38,5 +39,7 @@ void applyTheme(const std::string& theme, const std::array<float, 3>& accent, fl
 // 0 = best (green) .. 1 = worst (red), via amber.
 [[nodiscard]] ImVec4 rankColor(float t);
 [[nodiscard]] ImVec4 statusColor(const std::string& status);
+// Offer verification: verified green, deverified orange, unverified yellow.
+[[nodiscard]] ImVec4 verificationColor(const std::string& verification);
 
 }  // namespace vast::ui

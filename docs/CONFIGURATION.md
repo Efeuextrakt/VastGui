@@ -44,7 +44,7 @@ Only configuration files - in `%APPDATA%\VastGui\` (Linux: `~/.config/VastGui/`)
 | File | Content |
 |------|---------|
 | `imgui.ini` | window placement and docking layout |
-| `VastGui.json` | settings, filters, sort, presets, column choices, blacklist, current template, encrypted API key, cached GPU model list |
+| `VastGui.json` | settings, filters, sort, presets, column choices, card/table view (Search, Templates, Instances), template and instance card sort, blacklist, current template, encrypted API key, cached GPU model list |
 | `VastGui.log` | optional log file (Settings -> Connection -> *Write VastGui.log*) |
 | `secret.key` | encryption key for the API key in `VastGui.json`; always in `%APPDATA%\VastGui\` / `~/.config/VastGui/`, also in portable mode |
 

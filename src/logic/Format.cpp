@@ -68,6 +68,18 @@ std::string humanDuration(double seconds) {
     return std::format("{:.1f} yrs", seconds / (365.0 * 86400.0));
 }
 
+std::string compactNumber(double v) {
+    if (!std::isfinite(v)) return kMissing;
+    const double a = std::abs(v);
+    auto scaled = [&](double div, const char* suffix) {
+        const double x = v / div;
+        return std::abs(x) < 9.95 ? std::format("{:.1f}{}", x, suffix) : std::format("{:.0f}{}", x, suffix);
+    };
+    if (a >= 999500.0) return scaled(1e6, "M");
+    if (a >= 999.5) return scaled(1e3, "k");
+    return std::format("{:.0f}", v);
+}
+
 namespace {
 
 std::tm localTm(double epoch) {

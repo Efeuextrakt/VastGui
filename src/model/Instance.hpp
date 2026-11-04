@@ -47,6 +47,11 @@ struct Instance {
     std::optional<std::int64_t> machineId;
     std::optional<std::int64_t> hostId;
     std::optional<double> dphTotal;
+    // Actual current cost from the `instance` price object (discounts applied, GPU part 0 while stopped).
+    std::optional<double> costNowHr;
+    std::optional<double> costGpuHr;
+    std::optional<double> costDiskHr;
+    std::optional<double> costListHr;  // the same without discounts
     std::optional<double> totalFlops;
     std::optional<double> dlperf;
     std::optional<double> creditDiscountMax;  // host's max reserved discount (0..1)
@@ -310,6 +315,55 @@ inline void from_json(const json& j, Instance& o) {
     if (auto p = optInt(j, "direct_port_end")) o.directPortEnd = static_cast<int>(*p);
     o.isBid = optBool(j, "is_bid").value_or(false);
     if (const json* p = find(j, "ports"); p && p->is_object()) o.ports = *p;
+    // Port of the vast.ai console's instance price (m_() in its PricingBadges module): the `instance` price object,
+    // +5 % on the GPU for a running bid that is not outbid, GPU + disk for offline machines, and the reserved
+    // (discounted) price only while prepaid credit is left on the instance.
+    const bool reserved = o.creditBalance.value_or(0.0) > 0.0 && o.creditDiscount.value_or(0.0) > 0.0;
+    if (const json* c = find(j, "instance"); c && c->is_object() && optDouble(*c, "totalHour")) {
+        double gpu = optDouble(*c, "gpuCostPerHour").value_or(0.0);
+        const double disk = optDouble(*c, "diskHour").value_or(0.0);
+        double total = *optDouble(*c, "totalHour");
+        double discounted = optDouble(*c, "discountedTotalPerHour").value_or(total);
+        const double sla = optDouble(*c, "slaPremiumPerHour").value_or(0.0);
+        const bool outbidByPrice = o.isBid && o.dphTotal && o.minBid.value_or(0.0) * 1.0001 > *o.dphTotal;
+        const bool bidMarkup = o.isBid && !outbidByPrice;
+        if (bidMarkup) {
+            const double m = gpu * 0.05;
+            gpu += m;
+            total += m;
+            discounted += m;
+        }
+        total += sla;
+        discounted += sla;
+        if (o.actualStatus != "running") {
+            // Not billed while stopped; shown for reference only.
+            if (const json* s = find(j, "search"); s && s->is_object()) {
+                if (auto g = optDouble(*s, "gpuCostPerHour")) gpu = *g * (bidMarkup ? 1.05 : 1.0);
+            }
+        }
+        if (o.actualStatus == "offline") {
+            total = gpu + disk;
+            discounted = gpu * (1.0 - o.creditDiscount.value_or(0.0)) + disk;
+        }
+        o.costGpuHr = gpu;
+        o.costDiskHr = disk;
+        o.costListHr = total;
+        o.costNowHr = reserved ? discounted : total;
+    } else {
+        // Older API responses: storage only unless running; discounted_dph_total includes the reserved discount.
+        const std::optional<double> storage = optDouble(j, "storage_total_cost");
+        if (o.actualStatus == "running") {
+            o.costListHr = o.dphTotal;
+            o.costNowHr = reserved ? optDouble(j, "discounted_dph_total") : std::nullopt;
+            if (!o.costNowHr) o.costNowHr = o.dphTotal;
+        } else if (storage) {
+            o.costNowHr = storage;
+            o.costListHr = storage;
+            o.costDiskHr = storage;
+        } else {
+            o.costNowHr = o.dphTotal;
+        }
+    }
     o.raw = j;
 }
 
