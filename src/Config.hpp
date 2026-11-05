@@ -85,6 +85,8 @@ struct Settings {
 
 void to_json(json& j, const Settings& s);
 void from_json(const json& j, Settings& s);
+// Like from_json, but lists the values that were invalid and replaced by defaults (missing keys are not problems).
+void readSettings(const json& j, Settings& s, std::vector<std::string>* problems);
 
 // Missing/corrupt files yield defaults; `error` describes what went wrong. A legacy plaintext "api_key" is
 // re-saved encrypted right away.

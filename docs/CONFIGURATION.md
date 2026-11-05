@@ -49,4 +49,5 @@ Only configuration files - in `%APPDATA%\VastGui\` (Linux: `~/.config/VastGui/`)
 | `secret.key` | encryption key for the API key in `VastGui.json`; always in `%APPDATA%\VastGui\` / `~/.config/VastGui/`, also in portable mode |
 
 The app starts with sane defaults when they are missing; a corrupt `VastGui.json` is backed up as
-`VastGui.json.bad`.
+`VastGui.json.bad`. Values that are invalid or outdated (e.g. an unknown theme or sort option, a damaged section)
+are reset to their defaults one by one - the other settings are kept - and listed in the Activity log.

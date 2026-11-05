@@ -178,6 +178,20 @@ std::string QueryBuilder::buildQueryString(const SearchFilters& f) {
 
     if (f.secureCloudOnly) add("datacenter=true");
 
+    // Specific machines / hosts (asked from vast.ai, so they are found even outside the random sample).
+    auto idFilter = [&](const char* field, const std::string& text) {
+        const IdList l = parseIdList(text);
+        if (l.ids.size() == 1) {
+            add(std::format("{}={}", field, l.ids.front()));
+        } else if (l.ids.size() > 1) {
+            std::string list;
+            for (const long long id : l.ids) list += (list.empty() ? "" : ",") + std::to_string(id);
+            add(std::format("{} in [{}]", field, list));
+        }
+    };
+    idFilter("machine_id", f.machineIds);
+    idFilter("host_id", f.hostIds);
+
     double diskMin = f.effectiveDiskGb();
     if (const auto& r = f.range(RangeField::DiskSpace); r.min) diskMin = std::max(diskMin, *r.min);
     if (diskMin > 0) add("disk_space>=" + formatNumber(diskMin));
@@ -212,6 +226,33 @@ std::string QueryBuilder::buildQueryString(const SearchFilters& f) {
         if (!out.empty()) out += ' ';
         out += p;
     }
+    return out;
+}
+
+QueryBuilder::IdList QueryBuilder::parseIdList(std::string_view text) {
+    IdList out;
+    std::string token;
+    auto flush = [&] {
+        std::string t = token;
+        token.clear();
+        if (!t.empty() && t.front() == '#') t.erase(0, 1);
+        if (t.empty()) return;
+        const bool digits = t.size() <= 18 && std::all_of(t.begin(), t.end(), [](char c) { return c >= '0' && c <= '9'; });
+        if (!digits) {
+            out.invalid.push_back(std::move(t));
+            return;
+        }
+        const long long id = std::stoll(t);
+        if (std::find(out.ids.begin(), out.ids.end(), id) == out.ids.end()) out.ids.push_back(id);
+    };
+    for (const char c : text) {
+        if (c == ' ' || c == ',' || c == ';' || c == '\t' || c == '\n' || c == '\r') {
+            flush();
+        } else {
+            token.push_back(c);
+        }
+    }
+    flush();
     return out;
 }
 

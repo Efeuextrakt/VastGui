@@ -116,6 +116,59 @@ TEST_SUITE("Security") {
         CHECK(platform::readTextFile(paths.settingsFile)->find(lost.apiKeySealed) != std::string::npos);
     }
 
+    TEST_CASE("settings: missing, outdated or invalid values fall back to the defaults one by one") {
+        TempDir dir;
+        ConfigPaths paths;
+        paths.dir = dir.path;
+        paths.settingsFile = dir.path / "VastGui.json";
+        paths.keyFile = dir.path / "keys" / "secret.key";
+        std::string err;
+
+        // No file (clean machine): defaults, no message.
+        Settings fresh = loadSettings(paths, err);
+        CHECK(err.empty());
+        const json defaults = Settings{};
+        CHECK(json(fresh) == defaults);
+
+        // Defaults written and read back are unchanged and raise no problems.
+        std::vector<std::string> problems;
+        Settings back;
+        readSettings(defaults, back, &problems);
+        CHECK(problems.empty());
+        CHECK(json(back) == defaults);
+
+        // An old / damaged file: bad values are replaced, valid ones are kept.
+        const json bad = {{"theme", "neon"},          {"server_url", "ftp://x"},     {"default_sort", "nope"},
+                          {"instance_sort", 42},      {"template_sort", "size"},     {"filters", "oops"},
+                          {"defects", json::array()}, {"template", {{"name", "x"}}}, {"font_size", 99},
+                          {"search_requests", 500},   {"card_view", false},          {"backend", "cli"},
+                          {"currency", {{"symbol", "EUR"}, {"decimals", 2}}}};
+        REQUIRE(platform::writeTextFileAtomic(paths.settingsFile, bad.dump()));
+        const Settings s = loadSettings(paths, err);
+        CHECK(s.theme == "dark");
+        CHECK(s.serverUrl == Settings{}.serverUrl);
+        CHECK(s.defaultSort == "score");
+        CHECK(s.instanceSort == "label");
+        CHECK(s.templateSort == "name");
+        CHECK(json(s.filters) == json(SearchFilters{}));
+        CHECK(json(s.defects) == json(DefectThresholds{}));
+        CHECK(s.currentTemplate.image == Template::defaultTemplate().image);
+        CHECK(s.fontSize == doctest::Approx(32.0f));
+        CHECK(s.searchRequests == 50);
+        CHECK_FALSE(s.cardView);                      // valid values are kept
+        CHECK(s.currency.symbol == "EUR");
+        CHECK(s.currency.decimals == 2);
+        CHECK(err.find("reset to their defaults") != std::string::npos);
+        CHECK(err.find("theme") != std::string::npos);
+        CHECK(err.find("filters") != std::string::npos);
+        CHECK(err.find("backend") == std::string::npos);  // unknown old keys are simply ignored
+
+        // Not an object at all.
+        REQUIRE(platform::writeTextFileAtomic(paths.settingsFile, "[1, 2, 3]"));
+        CHECK(json(loadSettings(paths, err)) == defaults);
+        CHECK_FALSE(err.empty());
+    }
+
     TEST_CASE("API key only over https (http allowed for localhost)") {
         std::string why;
         CHECK(RestBackend::serverUrlAllowed("https://console.vast.ai/api/v0/x", why));

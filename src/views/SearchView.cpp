@@ -276,7 +276,7 @@ void SearchView::recompute(App& app) {
     defects_ = evaluateDefects(offers_, s.defects, s.blacklist);
     const auto order = sortedOrder(offers_, metrics_, f.sortKey, f.sortDesc);
     visible_.clear();
-    hiddenDefective_ = 0;
+    defectiveCount_ = 0;
     hiddenDeverified_ = 0;
     hiddenIncompatible_ = 0;
     hiddenRented_ = 0;
@@ -295,9 +295,9 @@ void SearchView::recompute(App& app) {
             ++hiddenIncompatible_;
             continue;
         }
-        if (f.hideDefective && defects_[idx].defective()) {
-            ++hiddenDefective_;
-            if (!showDefective_) continue;
+        if (defects_[idx].defective()) {
+            ++defectiveCount_;  // counts all defective offers; they are only removed when not shown
+            if (!f.showDefective) continue;
         }
         visible_.push_back(idx);
     }
@@ -747,6 +747,25 @@ void SearchView::drawFilterPanel(App& app) {
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Minimum max-instance-duration (time until the host's offer ends)");
     }
 
+    ImGui::SeparatorText("Machines / Hosts");
+    {
+        auto idField = [&](const char* id, const char* hint, std::string& text) {
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::InputTextWithHint(id, hint, &text)) filtersChanged(app);
+            const auto parsed = QueryBuilder::parseIdList(text);
+            if (!parsed.invalid.empty()) {
+                ui::TextWithColor(p.warning, ("Ignored (not a number): " + fmt::join(parsed.invalid, ", ")).c_str());
+            }
+        };
+        idField("##machineids", ICON_FA_SERVER "  Machine IDs, e.g. 12345 67890", f.machineIds);
+        idField("##hostids", ICON_FA_USER "  Host IDs, e.g. 256524", f.hostIds);
+        ui::TextDim("Only these machines / hosts");
+        ui::HelpMarker("Searches vast.ai for exactly these machines or hosts (IDs separated by spaces or commas), so "
+                       "they are found even when they are not in the normal random sample. The other filters still "
+                       "apply - if a machine is missing, tick Unverified Machines / Unavailable Offers or reset "
+                       "filters. Leave empty to search all machines.");
+    }
+
     ImGui::SeparatorText("Machine Options");
     if (ImGui::Checkbox("Unverified Machines", &f.showUnverified)) filtersChanged(app, true);
     ImGui::Indent();
@@ -777,7 +796,20 @@ void SearchView::drawFilterPanel(App& app) {
         recompute(app);  // client-side filter: no new request needed
     }
     ui::HelpMarker("Show offers on machines where you already have an instance (running, loading or stopped). "
-                   "They are marked RENTED BY YOU. When off they are hidden.");
+                   "They are marked RENTED. When off they are hidden.");
+    if (ImGui::Checkbox("Defective Machines", &f.showDefective)) {
+        recompute(app);
+        app.markSettingsDirty();
+    }
+    ui::HelpMarker("Show defective machines, marked with a red 'defective' tag and border. When off they are hidden.\n\n"
+                   "Defective: low reliability, missing inet/flops/dlperf/disk/CUDA values, performance far below the "
+                   "GPU model median, or on your blacklist (add machines from the Instances page or an offer's "
+                   "right-click menu). Thresholds are configurable in Settings.");
+    // Always rendered (also when 0) so the panel layout never jumps.
+    ImGui::Indent();
+    ImGui::TextColored(defectiveCount_ > 0 && !f.showDefective ? p.warning : p.textDim, "%d defective offers %s",
+                       defectiveCount_, f.showDefective ? "shown" : "hidden");
+    ImGui::Unindent();
     if (ImGui::Checkbox("Unavailable Offers", &f.showUnavailable)) filtersChanged(app, true);
     if (ImGui::Checkbox("Static IP Address", &f.staticIpOnly)) filtersChanged(app, true);
 
@@ -806,23 +838,6 @@ void SearchView::drawFilterPanel(App& app) {
             }
         }
     }
-
-    ImGui::SeparatorText("Defective Machines");
-    if (ImGui::Checkbox("Hide defective machines", &f.hideDefective)) {
-        recompute(app);
-        app.markSettingsDirty();
-    }
-    ui::HelpMarker("Low reliability, missing inet/flops/dlperf/disk/CUDA values, performance far below the GPU model "
-                   "median, or on your blacklist (add machines from the Instances page or an offer's right-click menu). "
-                   "Thresholds are configurable in Settings.");
-    ImGui::Indent();
-    ImGui::BeginDisabled(!f.hideDefective);
-    if (ImGui::Checkbox("Show them (marked defective)", &showDefective_)) recompute(app);
-    ImGui::EndDisabled();
-    ImGui::Unindent();
-    // Always rendered (also when 0) so the panel layout never jumps.
-    ImGui::TextColored(hiddenDefective_ > 0 && f.hideDefective ? p.warning : p.textDim, "%d defective offers %s",
-                       hiddenDefective_, showDefective_ ? "shown" : "hidden");
 
     ImGui::SeparatorText("Raw Query");
     ImGui::SetNextItemWidth(-FLT_MIN);
@@ -921,6 +936,20 @@ void SearchView::drawResults(App& app) {
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Offers that fail the selected template's requirements.\n"
                               "Tick 'Incompatible Machines' in Machine Options to show them.");
+        }
+    }
+    if (defectiveCount_ > 0 && !app.settings().filters.showDefective) {
+        ImGui::SameLine();
+        ui::TextDim(std::format("- {} defective hidden", defectiveCount_).c_str());
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Tick 'Defective Machines' in Machine Options to show them.");
+    }
+    {
+        const SearchFilters& sf = app.settings().filters;
+        const std::size_t ids = QueryBuilder::parseIdList(sf.machineIds).ids.size() + QueryBuilder::parseIdList(sf.hostIds).ids.size();
+        if (ids > 0) {
+            ImGui::SameLine();
+            ui::TextWithColor(p.accent, std::format("- only {} machine / host ID{}", ids, ids == 1 ? "" : "s").c_str());
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clear 'Machines / Hosts' in the filter panel to search all machines.");
         }
     }
     if (!warnings_.empty()) {

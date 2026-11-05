@@ -4,6 +4,7 @@
 #include "SecretBox.hpp"
 
 #include <algorithm>
+#include <format>
 #include <system_error>
 
 namespace vast {
@@ -84,20 +85,53 @@ void to_json(json& j, const Settings& s) {
     j["gpu_models"] = s.gpuModels;
 }
 
-void from_json(const json& j, Settings& s) {
+void from_json(const json& j, Settings& s) { readSettings(j, s, nullptr); }
+
+void readSettings(const json& j, Settings& s, std::vector<std::string>* problems) {
     using namespace jsonutil;
-    if (!j.is_object()) return;
+    s = Settings{};
+    auto problem = [&](std::string what) {
+        if (problems) problems->push_back(std::move(what));
+    };
+    if (!j.is_object()) {
+        problem("the file does not contain a settings object");
+        return;
+    }
+    // Every value falls back to its default on its own: a bad or outdated entry never resets the others.
+    auto oneOf = [&](const char* key, std::initializer_list<std::string_view> allowed, std::string def) {
+        const std::string v = str(j, key, def);
+        if (std::find(allowed.begin(), allowed.end(), v) != allowed.end()) return v;
+        problem(std::format("{} \"{}\" is unknown", key, v));
+        return def;
+    };
+    auto section = [&](const char* key, auto&& read) {
+        const json* v = find(j, key);
+        if (!v) return;
+        if (!v->is_object()) {
+            problem(std::format("{} is not an object", key));
+            return;
+        }
+        try {
+            read(*v);
+        } catch (const std::exception& e) {
+            problem(std::format("{} could not be read ({})", key, e.what()));
+        }
+    };
+
     s.apiKey = str(j, "api_key");  // legacy plaintext, migrated by loadSettings
     s.apiKeySealed = str(j, "api_key_enc");
-    s.serverUrl = str(j, "server_url", "https://console.vast.ai");
-    if (s.serverUrl.empty()) s.serverUrl = "https://console.vast.ai";
+    s.serverUrl = str(j, "server_url", Settings{}.serverUrl);
+    if (!s.serverUrl.starts_with("https://") && !s.serverUrl.starts_with("http://")) {
+        if (!s.serverUrl.empty()) problem(std::format("server_url \"{}\" is not an http(s) URL", s.serverUrl));
+        s.serverUrl = Settings{}.serverUrl;
+    }
     s.refreshIntervalSec = std::clamp(static_cast<int>(optInt(j, "refresh_interval_sec").value_or(30)), 5, 3600);
     s.autoRefresh = optBool(j, "auto_refresh").value_or(true);
     s.searchRefreshSec = std::clamp(static_cast<int>(optInt(j, "search_refresh_sec").value_or(0)), 0, 3600);
     s.searchLimit = std::clamp(static_cast<int>(optInt(j, "search_limit").value_or(1000)), kMinSearchLimit, kMaxSearchLimit);
-    s.searchRequests = std::max(1, static_cast<int>(optInt(j, "search_requests").value_or(kDefaultSearchRequests)));
+    s.searchRequests = std::clamp(static_cast<int>(optInt(j, "search_requests").value_or(kDefaultSearchRequests)), 1, 50);
     s.logToFile = optBool(j, "log_to_file").value_or(false);
-    s.theme = str(j, "theme", "dark");
+    s.theme = oneOf("theme", {"dark", "light"}, "dark");
     if (const json* a = find(j, "accent"); a && a->is_array() && a->size() == 3) {
         for (std::size_t i = 0; i < 3; ++i) {
             if ((*a)[i].is_number()) s.accent[i] = std::clamp((*a)[i].get<float>(), 0.0f, 1.0f);
@@ -105,22 +139,39 @@ void from_json(const json& j, Settings& s) {
     }
     s.fontSize = std::clamp(static_cast<float>(num(j, "font_size", 15.0)), 10.0f, 32.0f);
     s.uiScale = std::clamp(static_cast<float>(num(j, "ui_scale", 1.0)), 0.5f, 3.0f);
-    if (const json* d = find(j, "defects")) s.defects = d->get<DefectThresholds>();
-    if (const json* c = find(j, "currency")) s.currency = c->get<CurrencyFormat>();
+    section("defects", [&](const json& v) { s.defects = v.get<DefectThresholds>(); });
+    section("currency", [&](const json& v) { s.currency = v.get<CurrencyFormat>(); });
     s.defaultSort = str(j, "default_sort", "score");
-    s.defaultSortDesc = optBool(j, "default_sort_desc").value_or(true);
-    if (const json* f = find(j, "filters")) s.filters = f->get<SearchFilters>();
-    if (const json* p = find(j, "presets"); p && p->is_object()) {
-        for (const auto& [name, f] : p->items()) s.presets[name] = f.get<SearchFilters>();
+    if (!sortKeyFromId(s.defaultSort)) {
+        problem(std::format("default_sort \"{}\" is unknown", s.defaultSort));
+        s.defaultSort = "score";
     }
-    if (const json* b = find(j, "blacklist")) s.blacklist = b->get<Blacklist>();
-    if (const json* t = find(j, "template"); t && t->is_object()) s.currentTemplate = t->get<Template>();
+    s.defaultSortDesc = optBool(j, "default_sort_desc").value_or(true);
+    section("filters", [&](const json& v) { s.filters = v.get<SearchFilters>(); });
+    section("presets", [&](const json& v) {
+        for (const auto& [name, f] : v.items()) {
+            try {
+                s.presets[name] = f.get<SearchFilters>();
+            } catch (const std::exception&) {
+                problem(std::format("preset \"{}\" could not be read", name));
+            }
+        }
+    });
+    section("blacklist", [&](const json& v) { s.blacklist = v.get<Blacklist>(); });
+    section("template", [&](const json& v) {
+        Template t = v.get<Template>();
+        if (t.image.empty()) {
+            problem("template has no image");
+        } else {
+            s.currentTemplate = std::move(t);
+        }
+    });
     s.cardView = optBool(j, "card_view").value_or(true);
     s.templateCardView = optBool(j, "template_card_view").value_or(true);
-    s.templateSort = str(j, "template_sort") == "date" ? "date" : "name";
+    s.templateSort = oneOf("template_sort", {"name", "date"}, "name");
     s.templateSortDesc = optBool(j, "template_sort_desc").value_or(false);
     s.instanceCardView = optBool(j, "instance_card_view").value_or(true);
-    s.instanceSort = str(j, "instance_sort", "label");
+    s.instanceSort = oneOf("instance_sort", {"label", "id", "status", "gpu", "price", "uptime"}, "label");
     s.instanceSortDesc = optBool(j, "instance_sort_desc").value_or(false);
     s.offerColumns = boolsFromJson(j, "offer_columns");
     s.instanceColumns = boolsFromJson(j, "instance_columns");
@@ -148,11 +199,15 @@ Settings loadSettings(const ConfigPaths& paths, std::string& error) {
         return Settings{};
     }
     Settings s;
+    std::vector<std::string> problems;
     try {
-        s = j.get<Settings>();
+        readSettings(j, s, &problems);
     } catch (const std::exception& e) {
-        error = std::string("VastGui.json could not be read: ") + e.what();
+        error = std::string("VastGui.json could not be read: ") + e.what() + " - using defaults";
         return Settings{};
+    }
+    if (!problems.empty()) {
+        error = "VastGui.json: invalid or outdated values were reset to their defaults: " + fmt::join(problems, "; ");
     }
     if (!s.apiKeySealed.empty()) {
         std::string why;
@@ -161,13 +216,13 @@ Settings loadSettings(const ConfigPaths& paths, std::string& error) {
             s.apiKeySealed.clear();
         } else {
             s.apiKey.clear();
-            error = "The API key stored in VastGui.json could not be decrypted (" + why +
+            error += std::string(error.empty() ? "" : "\n") + "The API key stored in VastGui.json could not be decrypted (" + why +
                     "). Please enter it again in Settings.";
         }
     } else if (!s.apiKey.empty()) {
         std::string why;
         if (!saveSettings(paths, s, &why)) {
-            error = "The API key in VastGui.json is stored in plaintext and could not be encrypted: " + why;
+            error += std::string(error.empty() ? "" : "\n") + "The API key in VastGui.json is stored in plaintext and could not be encrypted: " + why;
         }
     }
     return s;

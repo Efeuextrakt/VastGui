@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.4.0 - 2026-11-05
+
+### Search
+- *Defective Machines* is now a normal option in *Machine Options* (ticked: shown with the red *defective* tag and
+  border; unticked: hidden), replacing the separate section with its nested *Hide* / *Show them* pair. The choice
+  is saved with the filters and presets (older settings are converted). The results header shows how many
+  defective offers are hidden.
+- New *Machines / Hosts* filter: enter machine and/or host IDs (separated by spaces or commas) to search exactly
+  those machines. vast.ai is asked for them directly, so they are found even when they are not in the random
+  sample. The header shows when the filter is active.
+
+### Settings
+- Settings files from older versions or with invalid values are read value by value: an unknown or invalid
+  entry (e.g. theme, server URL, sort options, a damaged filters or template section) falls back to its default
+  without resetting the other settings, and the Activity log lists what was reset. Out-of-range numbers are
+  clamped.
+
 ## 1.3.0 - 2026-11-04
 
 ### Search

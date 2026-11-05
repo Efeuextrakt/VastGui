@@ -126,9 +126,11 @@ struct SearchFilters {
 
     std::array<Range, kRangeFieldCount> ranges{};
     std::string rawQuery;
+    std::string machineIds;  // only these machines / hosts (IDs separated by spaces or commas); empty = all
+    std::string hostIds;
     int limit = 1000;  // runtime only, taken from Settings::searchLimit (not saved with filters/presets)
 
-    bool hideDefective = true;
+    bool showDefective = false;  // defective offers are listed (marked defective) instead of hidden
 
     // Disk size the offers are priced for: like the console, at least the template's recommended disk space.
     [[nodiscard]] double effectiveDiskGb() const { return std::max(diskGb, templateDiskGb.value_or(0.0)); }

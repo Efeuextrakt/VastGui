@@ -12,8 +12,11 @@
   region (planet / continent / country), sort (price, TFLOPS/$/hr, DLP/$/hr, reliability, inet, disk bandwidth,
   duration, VRAM, CUDA) with asc/desc, card view or a sortable, resizable, reorderable, hideable table.
 - Filter panel with template box (change/edit template), secure cloud, disk size + volume, reliability,
-  duration, machine options, CUDA/driver/Ubuntu minimums, 20 min/max range sliders, raw query box (vastai query
-  syntax), presets.
+  duration, specific machines / hosts, machine options, CUDA/driver/Ubuntu minimums, 20 min/max range sliders, raw
+  query box (vastai query syntax), presets.
+- **Machines / Hosts**: machine and/or host IDs (separated by spaces or commas) limit the search to exactly those
+  machines (`machine_id` / `host_id` in the query sent to vast.ai, so they are found even outside the random
+  sample). The other filters still apply.
 - **Prices** match the vast.ai web console: vast.ai's discounted total (`search.discountedTotalPerHour`: GPU +
   storage for the requested disk size, plus an SLA premium if any). The disk size is the larger of the *Disk Space*
   filter and the template's recommended disk (the filter panel says so when the template needs more). For
@@ -27,7 +30,8 @@
   DLPerf or TFLOPS per GPU more than 40 % below the median of the same GPU model in the current results
   (needs >= 3 samples of that model), or a blacklisted machine/host. A deverified status alone is *not* a defect -
   you decide by blacklisting machines (Ban button on the Instances page, or an offer's right-click menu).
-  The filter panel shows how many offers are hidden and can show them anyway (with a red *defective* tag and border).
+  The results header shows how many defective offers are hidden; tick *Defective Machines* in *Machine Options*
+  to list them with a red *defective* tag and border.
   Deverified offers are only listed when *Unverified Machines* and its sub-option *Deverified Machines* are ticked.
   Verification tags: verified green, unverified yellow, deverified orange.
 - **Incompatible machines**: offers that fail the selected template's requirements (its `extra_filters`, e.g.

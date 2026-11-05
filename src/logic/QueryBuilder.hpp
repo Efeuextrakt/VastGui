@@ -38,6 +38,14 @@ public:
     [[nodiscard]] static std::optional<double> cudaFromImageTag(std::string_view image);
     [[nodiscard]] static std::optional<double> parseVersionNumber(std::string_view v);
 
+    // "12345, 678 #91011" -> numeric IDs (separated by spaces, commas or semicolons; a leading '#' is allowed).
+    // Tokens with other characters go to `invalid`; duplicates are dropped.
+    struct IdList {
+        std::vector<long long> ids;
+        std::vector<std::string> invalid;
+    };
+    [[nodiscard]] static IdList parseIdList(std::string_view text);
+
     // Shell-quotes one argument (used for docker option strings).
     [[nodiscard]] static std::string quoteArgPosix(std::string_view arg);
 };

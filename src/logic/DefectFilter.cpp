@@ -2,6 +2,7 @@
 
 #include "logic/Metrics.hpp"
 
+#include <algorithm>
 #include <format>
 #include <map>
 
@@ -21,11 +22,12 @@ void from_json(const json& j, DefectThresholds& t) {
     using namespace jsonutil;
     t = DefectThresholds{};
     t.checkReliability = optBool(j, "check_reliability").value_or(t.checkReliability);
-    t.minReliability = optDouble(j, "min_reliability").value_or(t.minReliability);
+    t.minReliability = std::clamp(optDouble(j, "min_reliability").value_or(t.minReliability), 0.0, 1.0);
     t.checkMissingValues = optBool(j, "check_missing_values").value_or(t.checkMissingValues);
     t.checkLowPerformance = optBool(j, "check_low_performance").value_or(t.checkLowPerformance);
-    t.maxBelowMedian = optDouble(j, "max_below_median").value_or(t.maxBelowMedian);
-    t.minSamplesForMedian = static_cast<int>(optInt(j, "min_samples_for_median").value_or(t.minSamplesForMedian));
+    t.maxBelowMedian = std::clamp(optDouble(j, "max_below_median").value_or(t.maxBelowMedian), 0.0, 1.0);
+    t.minSamplesForMedian =
+        static_cast<int>(std::clamp<std::int64_t>(optInt(j, "min_samples_for_median").value_or(t.minSamplesForMedian), 1, 1000));
     t.checkBlacklist = optBool(j, "check_blacklist").value_or(t.checkBlacklist);
 }
 

@@ -85,7 +85,7 @@ private:
     std::vector<OfferMetrics> metrics_;
     std::vector<DefectInfo> defects_;
     std::vector<std::size_t> visible_;
-    int hiddenDefective_ = 0;
+    int defectiveCount_ = 0;
     int hiddenDeverified_ = 0;
     int hiddenIncompatible_ = 0;
     int hiddenRented_ = 0;
@@ -96,7 +96,6 @@ private:
     bool tableRowsDirty_ = true;
     int tableSortCol_ = -1;
     bool tableSortDesc_ = false;
-    bool showDefective_ = false;
     bool loading_ = false;
     std::string error_;
     std::vector<std::string> warnings_;

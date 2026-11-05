@@ -221,8 +221,37 @@ TEST_SUITE("QueryBuilder") {
         f.range(RangeField::Tflops).min = 50;
         f.range(RangeField::DlpPerDollar).min = 150;
         f.rawQuery = "bw_nvlink>0";
+        f.machineIds = "12345 678";
+        f.hostIds = "999";
+        f.showDefective = true;
         const json j = f;
         const SearchFilters back = j.get<SearchFilters>();
         CHECK(back == f);
+
+        // Older files: hide_defective (default true) instead of show_defective; invalid GPU counts fall back to ANY.
+        CHECK_FALSE(json{{"hide_defective", true}}.get<SearchFilters>().showDefective);
+        CHECK(json{{"hide_defective", false}}.get<SearchFilters>().showDefective);
+        CHECK_FALSE(json::object().get<SearchFilters>().showDefective);
+        CHECK(json{{"gpu_count", 3}}.get<SearchFilters>().gpuCount == 0);
+        CHECK(json{{"gpu_count", 8}}.get<SearchFilters>().gpuCount == 8);
+    }
+
+    TEST_CASE("machine and host ID filters") {
+        const auto l = QueryBuilder::parseIdList(" 12345, 678;#91011  12345 abc m:5 ");
+        CHECK(l.ids == std::vector<long long>{12345, 678, 91011});
+        CHECK(l.invalid == std::vector<std::string>{"abc", "m:5"});
+        CHECK(QueryBuilder::parseIdList("").ids.empty());
+
+        SearchFilters f;
+        f.machineIds = "51760";
+        f.hostIds = "331860, 371998";
+        const std::string q = QueryBuilder::buildQueryString(f);
+        CHECK(q.find("machine_id=51760") != std::string::npos);
+        CHECK(q.find("host_id in [331860,371998]") != std::string::npos);
+        const json b = QueryBuilder::buildRestBody(f);
+        CHECK(b["machine_id"]["eq"] == "51760");  // the vastai query parser sends strings; the server accepts them
+        CHECK(b["host_id"]["in"] == json::array({"331860", "371998"}));
+        f.machineIds = "abc";  // nothing valid: no constraint
+        CHECK_FALSE(QueryBuilder::buildRestBody(f).contains("machine_id"));
     }
 }
