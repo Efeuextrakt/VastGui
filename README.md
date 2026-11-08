@@ -32,7 +32,7 @@ price per performance and want to manage a fleet of instances from one window:
 - **Price per performance at a glance.** TFLOPS/$/hr and DLP/$/hr for every offer and instance, colour-coded from
   best to worst.
 - **Bad machines filtered out.** Low reliability, missing specs, performance far below the GPU model's median or
-  machines you blacklisted are hidden (or shown with a *defective* tag) automatically.
+  machines you blacklisted are hidden automatically (or listed with a *defective* / *blacklisted* tag).
 - **One small exe.** A single ~5 MB `VastGui.exe` - no installer, no runtime, no Python. Starts instantly, never
   blocks while requests run.
 
@@ -40,9 +40,9 @@ price per performance and want to manage a fleet of instances from one window:
 
 | Area | What you get |
 |------|--------------|
-| **Search** | GPU count, models, region, rental type (on-demand / interruptible / reserved), 20 range sliders, raw vastai queries, presets, card or table view |
+| **Search** | GPU count, models, region, rental type (on-demand / interruptible / reserved), 20 range sliders, specific machines / hosts, presets, card or table view |
 | **Metrics** | TFLOPS/$/hr and DLP/$/hr with percentile colouring; sort by any of them |
-| **Defect filter** | reliability threshold, missing/zero key specs, outliers vs. the model median, machine/host blacklist |
+| **Defect filter** | reliability threshold, missing/zero key specs, outliers vs. the model median; a separate machine/host blacklist |
 | **Templates** | your own, recommended and searchable templates; incompatible offers (CUDA, GPU RAM, ...) are flagged |
 | **Instances** | start/stop/reboot/destroy in bulk, outbid detection, live logs, SSH/SCP/Jupyter, snapshots, cloud copy, usage bars, $/hr history |
 | **Reserved discounts** | 1/3/6-month prepay plans with the real discount, like the web console |

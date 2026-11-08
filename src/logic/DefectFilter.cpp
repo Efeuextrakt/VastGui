@@ -14,8 +14,7 @@ void to_json(json& j, const DefectThresholds& t) {
              {"check_missing_values", t.checkMissingValues},
              {"check_low_performance", t.checkLowPerformance},
              {"max_below_median", t.maxBelowMedian},
-             {"min_samples_for_median", t.minSamplesForMedian},
-             {"check_blacklist", t.checkBlacklist}};
+             {"min_samples_for_median", t.minSamplesForMedian}};
 }
 
 void from_json(const json& j, DefectThresholds& t) {
@@ -28,7 +27,6 @@ void from_json(const json& j, DefectThresholds& t) {
     t.maxBelowMedian = std::clamp(optDouble(j, "max_below_median").value_or(t.maxBelowMedian), 0.0, 1.0);
     t.minSamplesForMedian =
         static_cast<int>(std::clamp<std::int64_t>(optInt(j, "min_samples_for_median").value_or(t.minSamplesForMedian), 1, 1000));
-    t.checkBlacklist = optBool(j, "check_blacklist").value_or(t.checkBlacklist);
 }
 
 void to_json(json& j, const Blacklist& b) { j = json{{"machines", b.machines}, {"hosts", b.hosts}}; }
@@ -140,15 +138,13 @@ std::vector<DefectInfo> evaluateDefects(std::span<const Offer> offers, const Def
             }
         }
 
-        if (t.checkBlacklist) {
-            if (blacklist.hasMachine(o.machineId)) {
-                d.flags |= DefectBlacklisted;
-                d.reasons.push_back(std::format("machine {} is on your blacklist", *o.machineId));
-            }
-            if (blacklist.hasHost(o.hostId)) {
-                d.flags |= DefectBlacklisted;
-                d.reasons.push_back(std::format("host {} is on your blacklist", *o.hostId));
-            }
+        if (blacklist.hasMachine(o.machineId)) {
+            d.flags |= DefectBlacklisted;
+            d.blacklistReasons.push_back(std::format("machine {} is on your blacklist", *o.machineId));
+        }
+        if (blacklist.hasHost(o.hostId)) {
+            d.flags |= DefectBlacklisted;
+            d.blacklistReasons.push_back(std::format("host {} is on your blacklist", *o.hostId));
         }
     }
     return out;

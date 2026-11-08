@@ -61,6 +61,15 @@ struct ReservedPlan {
 // Inverse: the plan a prepaid amount buys (solves amount = dph * (1 - discount(t)) * 720 * t for t).
 [[nodiscard]] std::optional<ReservedPlan> reservedPlanForAmount(double dphTotal, double maxDiscount, double amount);
 
+// Hours until the account credit reaches 0. `rate` is what the account pays now ($/hr); each `later` entry adds
+// its rate after the given number of hours (a prepaid instance whose own credit runs out switches to the account).
+// nullopt when nothing is billed to the account, ever.
+struct LaterCharge {
+    double afterHours = 0;
+    double rate = 0;
+};
+[[nodiscard]] std::optional<double> creditRunOutHours(double credit, double rate, std::vector<LaterCharge> later);
+
 // Deverified offers are only shown when both "Unverified" and its "Deverified" sub-option are on.
 [[nodiscard]] bool passesVerificationFilter(const Offer& o, const SearchFilters& f);
 

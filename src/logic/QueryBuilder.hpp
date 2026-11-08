@@ -21,11 +21,11 @@ struct QueryParseResult {
 
 class QueryBuilder {
 public:
-    // "num_gpus=1 gpu_name=RTX_4090 reliability>=0.9 ..." (GUI filters + raw query, raw last).
+    // "num_gpus=1 gpu_name=RTX_4090 reliability>=0.9 ..." (vastai query syntax for the GUI filters).
     [[nodiscard]] static std::string buildQueryString(const SearchFilters& f);
     // "-o" argument, e.g. "dph_total" or "score-".
     [[nodiscard]] static std::string orderString(const SearchFilters& f);
-    // Equivalent REST body; throws std::invalid_argument on an invalid raw query.
+    // Equivalent REST body; throws std::invalid_argument when a text filter (e.g. a version) is invalid.
     [[nodiscard]] static json buildRestBody(const SearchFilters& f);
 
     // C++ port of vastai's parse_query() for offer searches.

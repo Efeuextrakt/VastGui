@@ -4,6 +4,7 @@
 #include "Log.hpp"
 #include "backend/ApiKey.hpp"
 #include "backend/VastClient.hpp"
+#include "logic/Metrics.hpp"
 #include "model/Instance.hpp"
 #include "widgets/Toast.hpp"
 
@@ -47,7 +48,7 @@ class HostingView;
 class ConsoleView;
 class SettingsView;
 
-inline constexpr const char* kAppVersion = "1.4.0";
+inline constexpr const char* kAppVersion = "1.4.1";
 
 class App {
 public:
@@ -92,6 +93,15 @@ public:
     void refreshInstances(bool quiet = false);
     // $/hr samples per instance id (for sparklines), appended on every refresh.
     [[nodiscard]] const std::vector<std::pair<double, double>>* costHistory(std::int64_t id) const;
+    // What the instances cost the account per hour now. Prepaid (reserved) instances are paid from their own
+    // credit; `later` holds their normal rate from when that credit runs out.
+    struct AccountCost {
+        double rate = 0;         // billed to the account now
+        double prepaidRate = 0;  // paid from prepaid instance credit now
+        int prepaidCount = 0;
+        std::vector<LaterCharge> later;
+    };
+    [[nodiscard]] AccountCost accountCost() const;
 
     [[nodiscard]] const json& user() const { return user_; }
     // Reloads `show user`; `then` runs on the UI thread when the call finished (success or not).

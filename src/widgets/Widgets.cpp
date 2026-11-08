@@ -500,10 +500,15 @@ void MonoText(const char* id, const std::string& text, const ImVec2& size, bool 
     ImGui::PopStyleColor();
 }
 
+void PushCompactLines() {
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, std::round(ImGui::GetFontSize() * 0.08f)));
+}
+
 void LogText(const char* id, const std::string& text, const ImVec2& size, bool autoScroll) {
     ImGui::PushStyleColor(ImGuiCol_ChildBg, palette().sidebar);
     if (ImGui::BeginChild(id, size, ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar)) {
         if (g_mono) ImGui::PushFont(g_mono, 0.0f);
+        PushCompactLines();
         std::vector<std::size_t> starts{0};
         for (std::size_t i = 0; i < text.size(); ++i) {
             if (text[i] == '\n' && i + 1 < text.size()) starts.push_back(i + 1);
@@ -537,6 +542,7 @@ void LogText(const char* id, const std::string& text, const ImVec2& size, bool a
                 ImGui::TextUnformatted(text.data() + b, text.data() + e);
             }
         }
+        ImGui::PopStyleVar();
         if (g_mono) ImGui::PopFont();
         if (autoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 4.0f) ImGui::SetScrollHereY(1.0f);
         if (ImGui::BeginPopupContextWindow("##logctx")) {

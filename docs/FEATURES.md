@@ -11,9 +11,12 @@
   GTX, Titan, RTX PRO / Ada / A, Quadro, Data Center, AMD Instinct / Radeon, Other - and sorted by model and variant),
   region (planet / continent / country), sort (price, TFLOPS/$/hr, DLP/$/hr, reliability, inet, disk bandwidth,
   duration, VRAM, CUDA) with asc/desc, card view or a sortable, resizable, reorderable, hideable table.
-- Filter panel with template box (change/edit template), secure cloud, disk size + volume, reliability,
-  duration, specific machines / hosts, machine options, CUDA/driver/Ubuntu minimums, 20 min/max range sliders, raw
-  query box (vastai query syntax), presets.
+- Filter panel with template box (change/edit template), secure cloud, disk size + volume, presets, reliability,
+  duration, specific machines / hosts, machine options, CUDA/driver/Ubuntu minimums, 20 min/max range sliders.
+- **Presets** (under *Disk Space*): pick a saved filter set in the dropdown (trash icon deletes it), then *Save*
+  (current filters, as a new name or overwriting the selected one), *Load* (apply the selected preset) or *Reset*
+  (all filters back to the defaults).
+- The *Search* button leads the results line, so it stays in the same place whatever the window size.
 - **Machines / Hosts**: machine and/or host IDs (separated by spaces or commas) limit the search to exactly those
   machines (`machine_id` / `host_id` in the query sent to vast.ai, so they are found even outside the random
   sample). The other filters still apply.
@@ -28,10 +31,13 @@
 - **Defective machine filter** (on by default, thresholds in Settings): reliability below X %
   (default 90 %), missing/zero `inet_down`, `inet_up`, `total_flops`, `dlperf`, `disk_bw`, `cuda_max_good`,
   DLPerf or TFLOPS per GPU more than 40 % below the median of the same GPU model in the current results
-  (needs >= 3 samples of that model), or a blacklisted machine/host. A deverified status alone is *not* a defect -
-  you decide by blacklisting machines (Ban button on the Instances page, or an offer's right-click menu).
+  (needs >= 3 samples of that model). A deverified status alone is *not* a defect - you decide by blacklisting
+  machines.
   The results header shows how many defective offers are hidden; tick *Defective Machines* in *Machine Options*
   to list them with a red *defective* tag and border.
+- **Blacklisted machines** are not "defective": blacklist a machine with the Ban button on the Instances page or an
+  offer's right-click menu (manage the list in Settings > Blacklist). Their offers are hidden; tick *Blacklisted
+  Machines* in *Machine Options* to list them with a grey *blacklisted* tag and border.
   Deverified offers are only listed when *Unverified Machines* and its sub-option *Deverified Machines* are ticked.
   Verification tags: verified green, unverified yellow, deverified orange.
 - **Incompatible machines**: offers that fail the selected template's requirements (its `extra_filters`, e.g.
@@ -84,8 +90,14 @@ search to search because the server keeps sampling. Each request at limit 1000 d
   prepaid credit is left on the instance (`credit_balance > 0` and `credit_discount > 0`). The tooltip breaks it
   down (GPU / storage / reserved discount) and shows the normal running price. TFLOPS/$/hr and DLP/$/hr use the
   normal price.
-- Logs window: separate Instance / Daemon log tabs, line numbers, auto-refresh, save to file; tail defaults to
-  1000 lines, -/+ step 1000, *Max* = 20000.
+- **Hourly total** in the header: what is billed to the account now. Prepaid (reserved) instances are paid from
+  their own prepaid credit and are listed separately ("+ N prepaid: $x/hr").
+- **Machine details**: hover the instance ID or the GPU name (table and cards), or the machine line (cards), for the
+  machine's GPU,
+  performance, CPU and cores, RAM, board, PCIe, disk, network, CUDA / driver / Ubuntu, reliability, location and
+  verification.
+- Logs window: separate Instance / Daemon log tabs, line numbers, compact line spacing, auto-refresh, save to file;
+  tail defaults to 1000 lines, -/+ step 1000, *Max* = 20000.
 - Copy SSH command / SCP URL, open Jupyter, change bid, prepay, deposit, execute, copy files (between remote
   locations), cloud copy, snapshot, attach SSH key, create template from instance, recycle, update, blacklist the
   machine.
@@ -98,7 +110,8 @@ search to search because the server keeps sampling. Each request at limit 1000 d
 
 ## Templates
 
-- Tabs *My templates*, *Recommended* and *Search* (query syntax, e.g. `name=PyTorch`).
+- Tabs *My templates*, *Recommended* and *Search* (query syntax, e.g. `name=PyTorch`; the query field is only on
+  the Search tab).
 - **Card view** like the vast.ai console (default; card / table toggle on the toolbar, default in Settings >
   Appearance): a responsive grid with name, image:tag, tags (recommended, public/private, launch mode, recommended
   disk, usage count), a two-line description (full text on hover) and *Select* (use for search / rent; the current
@@ -108,9 +121,16 @@ search to search because the server keeps sampling. Each request at limit 1000 d
 - Create / edit form: image, tag, login, launch mode, env vars, ports, docker options, search params, on-start
   script, readme.
 
+## Billing
+
+- Current credit and balance, and when the credit runs out at the current instance costs: time left and the local
+  date and time (red under 1 day, orange under 3 days). Prepaid instances count from when their prepaid credit is
+  used up, at their normal price. Bandwidth, new rentals and price changes are not included.
+- Invoices and charges for a date range, chart and CSV export.
+
 ## Other pages
 
-**Storage, Serverless, Billing, Earnings, Members/Team, Audit Logs, Keys, Hosting, Activity log,
+**Storage, Serverless, Earnings, Members/Team, Audit Logs, Keys, Hosting, Activity log,
 Settings** - see the in-app pages. Every action logs the API request it sends (`> PUT /api/v0/...`, never the
 request body) in the Activity log.
 

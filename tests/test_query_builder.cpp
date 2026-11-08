@@ -104,15 +104,6 @@ TEST_SUITE("QueryBuilder") {
         CHECK_FALSE(contains(q, "disk_space>=50"));
     }
 
-    TEST_CASE("raw query is appended last") {
-        SearchFilters f;
-        f.gpuCount = 1;
-        f.rawQuery = "  bw_nvlink>0 ";
-        const auto q = QueryBuilder::buildQueryString(f);
-        CHECK(q.size() >= 11);
-        CHECK(q.substr(q.size() - 11) == "bw_nvlink>0");
-    }
-
     TEST_CASE("sort orders map to server fields") {
         SearchFilters f;
         f.sortKey = SortKey::Price;
@@ -193,7 +184,7 @@ TEST_SUITE("QueryBuilder") {
 
         f.showUnverified = true;
         CHECK_FALSE(QueryBuilder::buildRestBody(f).contains("verified"));
-        f.rawQuery = "gpu_ram>=oops";
+        f.minDriver = "not.a.version";
         CHECK_THROWS_AS((void)QueryBuilder::buildRestBody(f), std::invalid_argument);
     }
 
@@ -220,7 +211,6 @@ TEST_SUITE("QueryBuilder") {
         f.minReliability = 0.97;
         f.range(RangeField::Tflops).min = 50;
         f.range(RangeField::DlpPerDollar).min = 150;
-        f.rawQuery = "bw_nvlink>0";
         f.machineIds = "12345 678";
         f.hostIds = "999";
         f.showDefective = true;

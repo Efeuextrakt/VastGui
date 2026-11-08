@@ -59,6 +59,70 @@ std::optional<double> cpuPercent(const Instance& i) {
     return std::min(v, 100.0);
 }
 
+// Machine details (CPU, RAM, board, PCIe, disk, network, CUDA/driver, ...) of the machine an instance runs on.
+void drawMachineTooltip(const Instance& i) {
+    using namespace jsonutil;
+    const json& r = i.raw;
+    if (!ImGui::BeginTooltip()) return;
+    ImGui::Text("%dx %s", i.numGpus, i.gpuName.c_str());
+    ui::TextDim(std::format("instance #{}  machine {}  host {}", i.id, i.machineId.value_or(0), i.hostId.value_or(0)).c_str());
+    ImGui::Separator();
+    auto row = [](const char* k, const std::string& v) {
+        if (v.empty()) return;
+        ui::TextDim(k);
+        ImGui::SameLine(ImGui::GetFontSize() * 7.0f);
+        ImGui::TextUnformatted(v.c_str());
+    };
+    const auto gpuRam = optDouble(r, "gpu_ram");
+    row("GPU", std::format("{}{}", i.gpuName, gpuRam ? std::format("  {:.0f} GB", *gpuRam / 1024.0) : std::string{}));
+    {
+        std::string perf;
+        if (auto t = optDouble(r, "total_flops")) perf += formatMetric(t, 1) + " TFLOPS";
+        if (auto d = optDouble(r, "dlperf")) perf += (perf.empty() ? "" : "   DLPerf ") + formatMetric(d, 1);
+        row("Performance", perf);
+    }
+    {
+        std::string cpu = str(r, "cpu_name");
+        const auto eff = optDouble(r, "cpu_cores_effective");
+        const auto cores = optDouble(r, "cpu_cores");
+        if (eff || cores) cpu += std::format("  {}/{} cores", formatMetric(eff, 1), formatMetric(cores, 0));
+        row("CPU", cpu);
+    }
+    if (auto ram = optDouble(r, "cpu_ram")) row("RAM", std::format("{:.0f} GB", *ram / 1024.0));
+    row("Board", str(r, "mobo_name"));
+    {
+        std::string pcie;
+        if (auto g = optDouble(r, "pci_gen")) pcie = "PCIe " + formatMetric(g, 1);
+        if (auto l = optDouble(r, "gpu_lanes")) pcie += " x" + formatMetric(l, 0);
+        if (auto b = optDouble(r, "pcie_bw")) pcie += "  " + formatMetric(b, 1) + " GB/s";
+        row("PCIe", pcie);
+    }
+    {
+        std::string disk = str(r, "disk_name");
+        if (auto bw = optDouble(r, "disk_bw")) disk += std::format("{}{} MB/s", disk.empty() ? "" : "  ", formatMetric(bw, 0));
+        if (i.diskSpace) disk += std::format("  {:.0f} GB", *i.diskSpace);
+        row("Disk", disk);
+    }
+    if (i.inetUp || i.inetDown) {
+        row("Network", std::format("up {}  down {} Mbps", formatMetric(i.inetUp, 0), formatMetric(i.inetDown, 0)));
+    }
+    {
+        std::string sw;
+        if (auto c = optDouble(r, "cuda_max_good")) sw = "CUDA " + formatMetric(c, 1);
+        if (const std::string d = str(r, "driver_version"); !d.empty()) sw += (sw.empty() ? "" : "  ") + ("driver " + d);
+        if (const std::string os = str(r, "os_version"); !os.empty()) sw += (sw.empty() ? "" : "  ") + ("Ubuntu " + os);
+        row("Software", sw);
+    }
+    {
+        auto rel = optDouble(r, "reliability2");
+        if (!rel) rel = optDouble(r, "reliability");
+        row("Reliability", rel ? fmt::percent(rel, 2) : std::string{});
+    }
+    row("Location", i.geolocation);
+    row("Verification", str(r, "verification"));
+    ImGui::EndTooltip();
+}
+
 // Breakdown of an instance's current cost (what it is billed right now, not its list price).
 void drawCostTooltip(const Instance& i, const CurrencyFormat& c) {
     if (!ImGui::BeginTooltip()) return;
@@ -78,6 +142,13 @@ void drawCostTooltip(const Instance& i, const CurrencyFormat& c) {
     ImGui::Separator();
     row("Total", fmt::money(i.costNowHr, c, 4) + "/hr");
     if (!running) ui::TextDim("Not running: only the storage is billed.");
+    if (i.prepaid()) {
+        const double hours = i.costNowHr && *i.costNowHr > 0 ? *i.creditBalance / *i.costNowHr : 0.0;
+        ui::TextWithColor(ui::palette().success,
+                          std::format("Prepaid: {} credit left{} - not billed to your account", fmt::money(*i.creditBalance, c, 2),
+                                      hours > 0 ? std::format(" (~{})", fmt::humanDuration(hours * 3600.0)) : std::string{})
+                              .c_str());
+    }
     if (i.dphTotal && (!i.costNowHr || std::abs(*i.dphTotal - *i.costNowHr) > 1e-6)) {
         ui::TextDim(std::format("Normal price while running: {}/hr", fmt::money(i.dphTotal, c, 4)).c_str());
     }
@@ -150,7 +221,7 @@ void toggleMachineBlacklist(App& app, const Instance& inst) {
     } else {
         machines.insert(id);
         app.toasts().info("Machine " + std::to_string(id) + " blacklisted",
-                          "Its offers are now treated as defective in Search. Manage the list in Settings.");
+                          "Its offers are hidden in Search (or marked blacklisted). Manage the list in Settings.");
     }
     app.markSettingsDirty();
     app.searchView().onBlacklistChanged(app);
@@ -350,18 +421,28 @@ void InstancesView::drawToolbar(App& app) {
     const auto& list = app.instances();
     int running = 0;
     int outbid = 0;
-    double burn = 0;
     const double now = fmt::nowEpoch();
     for (const auto& i : list) {
         if (i.consoleStatus(now, app.user()).outbid) ++outbid;
         if (i.status() == "running") ++running;
-        burn += i.costNowHr.value_or(0.0);  // includes the storage of stopped instances
     }
+    // Prepaid (reserved) instances are paid from their own credit, so they are not part of the hourly total.
+    const App::AccountCost cost = app.accountCost();
+    const CurrencyFormat& cur = app.settings().currency;
     const std::string outbidText = outbid > 0 ? std::format(", {} outbid", outbid) : std::string{};
+    const std::string prepaidText =
+        cost.prepaidCount > 0 ? std::format(" (+ {} prepaid: {}/hr)", cost.prepaidCount, fmt::money(cost.prepaidRate, cur)) : std::string{};
     ui::PageHeader(ICON_FA_SERVER, "Instances",
-                   std::format("{} total, {} running{}, {}/hr", list.size(), running, outbidText,
-                               fmt::money(burn, app.settings().currency))
+                   std::format("{} total, {} running{}, {}/hr{}", list.size(), running, outbidText, fmt::money(cost.rate, cur),
+                               prepaidText)
                        .c_str());
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s/hr is billed to your account now (storage of stopped instances included).%s",
+                          fmt::money(cost.rate, cur).c_str(),
+                          cost.prepaidCount > 0 ? "\nPrepaid (reserved) instances are paid from their own prepaid credit and are "
+                                                  "not included; when it runs out they are billed at the normal price."
+                                                : "");
+    }
     if (app.apiKey().key.empty()) {
         ui::TextWithColor(ui::palette().warning, ICON_FA_KEY "  Set an API key in Settings to manage instances.");
     }
@@ -592,7 +673,7 @@ void InstancesView::drawActions(App& app, const Instance& i) {
         const ImVec4 danger = ui::palette().danger;
         const std::string tip = !i.machineId ? std::string("No machine ID")
                                 : listed ? std::format("Machine {} is blacklisted - click to remove", *i.machineId)
-                                         : std::format("Blacklist machine {} (treat its offers as defective)", *i.machineId);
+                                         : std::format("Blacklist machine {} (hide its offers in Search)", *i.machineId);
         ImGui::BeginDisabled(!i.machineId.has_value());
         if (ui::IconButton(ICON_FA_BAN, tip.c_str(), listed ? &danger : nullptr)) toggleMachineBlacklist(app, i);
         ImGui::EndDisabled();
@@ -702,7 +783,7 @@ void InstancesView::drawCard(App& app, const Instance& i, double now, float heig
         drawStatusBadge(app, i, now);
         ImGui::SameLine();
         ui::TextDim(std::format("#{}", i.id).c_str());
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Instance ID (double-click the card for the raw JSON)");
+        if (ImGui::IsItemHovered()) drawMachineTooltip(i);
         const float colW = ImGui::GetContentRegionAvail().x;
         if (i.label.empty()) {
             ui::TextDim("(no name)");
@@ -713,7 +794,9 @@ void InstancesView::drawCard(App& app, const Instance& i, double now, float heig
         ImGui::PushFont(nullptr, style.FontSizeBase * 1.45f);
         ImGui::Text("%dx %s", i.numGpus, i.gpuName.c_str());
         ImGui::PopFont();
+        if (ImGui::IsItemHovered()) drawMachineTooltip(i);
         ui::TextDim(std::format("m:{}  host:{}", i.machineId.value_or(0), i.hostId.value_or(0)).c_str());
+        if (ImGui::IsItemHovered()) drawMachineTooltip(i);
         ui::TextDim(ui::Ellipsize(i.geolocation.empty() ? std::string(kMissing) : i.geolocation, colW).c_str());
 
         // Middle: image, template, uptime, SSH, ports.
@@ -892,17 +975,28 @@ void InstancesView::drawTable(App& app) {
                     }
                     break;
                 }
-                case ICId:
-                    ui::TableRowSelectable(std::to_string(i.id).c_str(), selected_.contains(i.id));
+                case ICId: {
+                    const std::string idText = std::to_string(i.id);
+                    const ImVec2 idPos = ImGui::GetCursorScreenPos();
+                    ui::TableRowSelectable(idText.c_str(), selected_.contains(i.id));
                     if (ImGui::BeginPopupContextItem("##instctx")) {
                         drawRowMenu(app, i);
                         ImGui::EndPopup();
                     }
                     if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) openDialog(Dialog::Json, i);
+                    // The selectable spans the whole row: only the ID text itself shows the machine tooltip.
+                    const ImVec2 idSize = ImGui::CalcTextSize(idText.c_str());
+                    if (ImGui::IsItemHovered() && ImGui::IsMouseHoveringRect(idPos, ImVec2(idPos.x + idSize.x, idPos.y + idSize.y))) {
+                        drawMachineTooltip(i);
+                    }
                     break;
+                }
                 case ICLabel: ImGui::TextUnformatted(i.label.empty() ? "-" : i.label.c_str()); break;
                 case ICStatus: drawStatusBadge(app, i, now); break;
-                case ICGpu: ImGui::Text("%dx %s", i.numGpus, i.gpuName.c_str()); break;
+                case ICGpu:
+                    ImGui::Text("%dx %s", i.numGpus, i.gpuName.c_str());
+                    if (ImGui::IsItemHovered()) drawMachineTooltip(i);
+                    break;
                 case ICImage:
                     ImGui::TextUnformatted(i.image.c_str());
                     if (ImGui::IsItemHovered() && !i.templateName.empty()) ImGui::SetTooltip("Template: %s", i.templateName.c_str());

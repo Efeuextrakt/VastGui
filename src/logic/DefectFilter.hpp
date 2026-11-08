@@ -19,7 +19,6 @@ struct DefectThresholds {
     bool checkLowPerformance = true;
     double maxBelowMedian = 0.40;       // flagged when value < (1 - maxBelowMedian) * median
     int minSamplesForMedian = 3;        // need this many offers of a GPU model to judge
-    bool checkBlacklist = true;
 };
 
 void to_json(json& j, const DefectThresholds& t);
@@ -35,7 +34,8 @@ struct Blacklist {
 void to_json(json& j, const Blacklist& b);
 void from_json(const json& j, Blacklist& b);
 
-// Deverified status alone is not a defect: the user decides via the blacklist.
+// Deverified status alone is not a defect: the user decides via the blacklist. A blacklisted machine is not
+// "defective" - it is the user's choice and has its own label and search filter.
 enum DefectFlag : std::uint32_t {
     DefectNone = 0,
     DefectLowReliability = 1u << 1,
@@ -46,8 +46,10 @@ enum DefectFlag : std::uint32_t {
 
 struct DefectInfo {
     std::uint32_t flags = DefectNone;
-    std::vector<std::string> reasons;
-    [[nodiscard]] bool defective() const { return flags != DefectNone; }
+    std::vector<std::string> reasons;           // why it is defective
+    std::vector<std::string> blacklistReasons;  // "machine 123 is on your blacklist", ...
+    [[nodiscard]] bool defective() const { return (flags & ~std::uint32_t{DefectBlacklisted}) != 0; }
+    [[nodiscard]] bool blacklisted() const { return (flags & DefectBlacklisted) != 0; }
 };
 
 // Fields that must be present and > 0 for a healthy offer.

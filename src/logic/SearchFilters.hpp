@@ -125,12 +125,12 @@ struct SearchFilters {
     json templateRequirements = json::object();  // runtime only: template extra_filters + image CUDA, REST query format
 
     std::array<Range, kRangeFieldCount> ranges{};
-    std::string rawQuery;
     std::string machineIds;  // only these machines / hosts (IDs separated by spaces or commas); empty = all
     std::string hostIds;
     int limit = 1000;  // runtime only, taken from Settings::searchLimit (not saved with filters/presets)
 
     bool showDefective = false;  // defective offers are listed (marked defective) instead of hidden
+    bool showBlacklisted = false;  // offers on blacklisted machines / hosts are listed (marked blacklisted)
 
     // Disk size the offers are priced for: like the console, at least the template's recommended disk space.
     [[nodiscard]] double effectiveDiskGb() const { return std::max(diskGb, templateDiskGb.value_or(0.0)); }

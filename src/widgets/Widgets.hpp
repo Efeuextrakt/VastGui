@@ -59,6 +59,8 @@ void JsonTree(const json& j, const char* rootLabel = nullptr);
 void JsonText(const char* id, const json& j, const ImVec2& size = ImVec2(0, 0));
 void MonoText(const char* id, const std::string& text, const ImVec2& size = ImVec2(0, 0), bool autoScroll = false);
 // Monospace log viewer with a line-number gutter. Numbers are display-only (copy gives the plain text).
+// Log views: almost no gap between lines (pop with ImGui::PopStyleVar()).
+void PushCompactLines();
 void LogText(const char* id, const std::string& text, const ImVec2& size = ImVec2(0, 0), bool autoScroll = true);
 
 // Generic sortable/filterable table for JSON arrays of objects.

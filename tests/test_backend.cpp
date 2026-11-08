@@ -192,14 +192,14 @@ TEST_SUITE("Backend") {
         CHECK_FALSE(cmd::copyFiles("C.1:a//b", "C.2:/x").error.empty());    // invalid path
     }
 
-    TEST_CASE("search offers request; an invalid raw query fails without a request") {
+    TEST_CASE("search offers request; an invalid text filter fails without a request") {
         SearchFilters f;
         f.gpuModels = {"RTX 5090"};
         const ApiCall c = cmd::searchOffers(f);
         CHECK(c.error.empty());
         CHECK(c.rest.path == "/bundles/");
         CHECK((*c.rest.body)["gpu_name"]["eq"] == "RTX 5090");
-        f.rawQuery = "gpu_ram>=bad";
+        f.minDriver = "not.a.version";
         CHECK(cmd::searchOffers(f).error.find("invalid search query") != std::string::npos);
     }
 

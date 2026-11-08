@@ -111,8 +111,11 @@ OfferAction OfferCard(const Offer& o, const OfferMetrics& m, const DefectInfo& d
 
     ImGui::PushID(static_cast<int>(o.id));
     ImGui::PushStyleColor(ImGuiCol_ChildBg, p.card);
-    // Rented by you: bluish border; defective: reddish border (the card is not dimmed).
-    const ImVec4 border = ctx.rentedByMe ? p.info : d.defective() ? ImVec4(p.danger.x, p.danger.y, p.danger.z, 0.6f) : p.border;
+    // Rented by you: bluish border; defective: reddish; blacklisted: grey (the card is not dimmed).
+    const ImVec4 border = ctx.rentedByMe     ? p.info
+                          : d.defective()   ? ImVec4(p.danger.x, p.danger.y, p.danger.z, 0.6f)
+                          : d.blacklisted() ? ImVec4(p.textDim.x, p.textDim.y, p.textDim.z, 0.7f)
+                                            : p.border;
     ImGui::PushStyleColor(ImGuiCol_Border, border);
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, ctx.rentedByMe ? std::max(1.5f, ImGui::GetStyle().ChildBorderSize * 1.5f)
@@ -136,6 +139,14 @@ OfferAction OfferCard(const Offer& o, const OfferMetrics& m, const DefectInfo& d
         // Left: identity + GPU.
         ImGui::TableSetColumnIndex(0);
         dimLine(std::format("m:{}  host:{}", o.machineId.value_or(0), o.hostId.value_or(0)));
+        // "Blacklisted" badge on an existing line so the card height never changes; shortened when narrow.
+        auto blacklistBadge = [&] {
+            if (!d.blacklisted()) return;
+            ImGui::SameLine();
+            const std::string why = fmt::join(d.blacklistReasons, "\n") + "\n\nManage the blacklist in Settings.";
+            const char* label = ImGui::GetContentRegionAvail().x >= BadgeSize("blacklisted").x ? "blacklisted" : ICON_FA_BAN;
+            InlineBadge(label, p.textDim, true, why.c_str());
+        };
         ImGui::PushFont(nullptr, ImGui::GetStyle().FontSizeBase * 1.45f);
         ImGui::Text("%dx %s", o.numGpus, o.gpuName.c_str());
         ImGui::PopFont();
@@ -151,6 +162,7 @@ OfferAction OfferCard(const Offer& o, const OfferMetrics& m, const DefectInfo& d
         } else {
             dimLine(std::format("Max CUDA {}", formatMetric(o.cudaMaxGood, 1)));
         }
+        blacklistBadge();
 
         // Middle: machine details.
         ImGui::TableSetColumnIndex(1);

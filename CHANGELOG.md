@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.4.1 - 2026-11-08
+
+### Search
+- The raw query field is gone.
+- The *Search* button now leads the results line ("Search  17 offers - ..."), so it stays in the same place
+  whatever the window size (it no longer moves with the wrapping top bar).
+- Presets moved under *Disk Space*, in their own *Presets* section with a new layout: a dropdown to pick a saved
+  preset (trash icon to delete; the list keeps the dropdown's width, long names are shortened), then *Save*,
+  *Load* and *Reset*. The old buttons at the bottom of the panel are gone.
+- Blacklisted machines are no longer "defective": they have their own grey *blacklisted* tag (card: next to the
+  CUDA line; table: Status column) and border, and their own *Blacklisted Machines* option in *Machine Options*
+  (off = hidden). The results header shows how many are hidden. The *Flag blacklisted machines* setting is gone.
+
+### Instances
+- Hover the instance ID or the GPU name (table and cards), or the machine line (cards), for the machine's details:
+  GPU, performance, CPU and cores, RAM, board, PCIe, disk, network, CUDA / driver / Ubuntu, reliability, location,
+  verification.
+- The hourly total in the header only counts what is billed to the account: prepaid (reserved) instances are paid
+  from their own prepaid credit and are shown separately ("+ 1 prepaid: $0.028/hr"). The $/hr tooltip shows the
+  prepaid credit left.
+
+### Billing
+- Shows when the credit runs out at the current instance costs: time left plus the local date and time (red under
+  1 day, orange under 3 days). Prepaid instances are added at their normal price once their prepaid credit is used
+  up.
+
+### Templates
+- The query field is only shown on the *Search* tab.
+
+### UI
+- Logs (instance logs, Activity panel and Activity log page) use compact line spacing.
+- Dropdowns and menus have an opaque background (text behind them no longer shines through).
+
 ## 1.4.0 - 2026-11-05
 
 ### Search

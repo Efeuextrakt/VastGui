@@ -86,6 +86,7 @@ private:
     std::vector<DefectInfo> defects_;
     std::vector<std::size_t> visible_;
     int defectiveCount_ = 0;
+    int blacklistedCount_ = 0;
     int hiddenDeverified_ = 0;
     int hiddenIncompatible_ = 0;
     int hiddenRented_ = 0;
@@ -119,6 +120,7 @@ private:
     bool openTemplateEditor_ = false;
     bool openSavePreset_ = false;
     std::string presetName_;
+    std::string selectedPreset_;  // preset picked in the filter panel's dropdown
 
     void loadTemplateTab(App& app, int tab, bool force);
     void prepareTemplatePicker(App& app);

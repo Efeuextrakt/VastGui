@@ -79,15 +79,25 @@ TEST_SUITE("DefectFilter") {
         CHECK_FALSE(evaluateDefects(offers, DefectThresholds{}, Blacklist{})[1].defective());
     }
 
-    TEST_CASE("blacklisted machine or host") {
+    TEST_CASE("blacklisted machine or host is not defective") {
         auto offers = fourGood();
         Blacklist b;
         b.machines.insert(*offers[0].machineId);
         b.hosts.insert(*offers[3].hostId);
         const auto d = evaluateDefects(offers, DefectThresholds{}, b);
         CHECK(d[0].flags == DefectBlacklisted);
-        CHECK(d[3].flags == DefectBlacklisted);
-        CHECK_FALSE(d[1].defective());
+        CHECK(d[0].blacklisted());
+        CHECK_FALSE(d[0].defective());
+        CHECK(d[0].reasons.empty());
+        CHECK(d[0].blacklistReasons.size() == 1);
+        CHECK(d[3].blacklisted());
+        CHECK_FALSE(d[1].blacklisted());
+
+        // Blacklisted and defective at the same time.
+        offers[0].reliability = 0.1;
+        const auto both = evaluateDefects(offers, DefectThresholds{}, b);
+        CHECK(both[0].blacklisted());
+        CHECK(both[0].defective());
     }
 
     TEST_CASE("all checks disabled") {
@@ -95,22 +105,20 @@ TEST_SUITE("DefectFilter") {
         offers[0].verification = "deverified";
         offers[0].reliability = 0.1;
         offers[0].dlperf.reset();
-        Blacklist b;
-        b.machines.insert(*offers[0].machineId);
         DefectThresholds t;
-        t.checkReliability = t.checkMissingValues = t.checkLowPerformance = t.checkBlacklist = false;
-        CHECK_FALSE(evaluateDefects(offers, t, b)[0].defective());
+        t.checkReliability = t.checkMissingValues = t.checkLowPerformance = false;
+        CHECK_FALSE(evaluateDefects(offers, t, Blacklist{})[0].defective());
     }
 
     TEST_CASE("thresholds and blacklist JSON round trip") {
         DefectThresholds t;
         t.minReliability = 0.95;
         t.maxBelowMedian = 0.25;
-        t.checkBlacklist = false;
+        t.checkLowPerformance = false;
         const DefectThresholds t2 = json(t).get<DefectThresholds>();
         CHECK(t2.minReliability == doctest::Approx(0.95));
         CHECK(t2.maxBelowMedian == doctest::Approx(0.25));
-        CHECK_FALSE(t2.checkBlacklist);
+        CHECK_FALSE(t2.checkLowPerformance);
 
         Blacklist b;
         b.machines = {1, 2};

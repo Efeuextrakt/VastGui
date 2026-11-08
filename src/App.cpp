@@ -229,6 +229,22 @@ const std::vector<std::pair<double, double>>* App::costHistory(std::int64_t id) 
     return nullptr;
 }
 
+App::AccountCost App::accountCost() const {
+    AccountCost c;
+    for (const auto& i : instances_) {
+        const double now = i.costNowHr.value_or(0.0);
+        if (!i.prepaid()) {
+            c.rate += now;
+            continue;
+        }
+        c.prepaidRate += now;
+        ++c.prepaidCount;
+        // The prepaid credit lasts credit_balance / reserved rate hours; then the normal price is billed.
+        if (now > 0.0) c.later.push_back({*i.creditBalance / now, i.costListHr.value_or(now)});
+    }
+    return c;
+}
+
 void App::refreshUser(std::function<void()> then) {
     ApiCall c = cmd::showUser();
     c.quiet = true;
@@ -525,6 +541,7 @@ void App::drawActivityLog() {
     ImGui::PushStyleColor(ImGuiCol_ChildBg, p.sidebar);
     if (ImGui::BeginChild("##activity", ImVec2(0, 0), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar)) {
         if (ui::monoFont()) ImGui::PushFont(ui::monoFont(), 0.0f);
+        ui::PushCompactLines();
         ImGuiListClipper clipper;
         clipper.Begin(static_cast<int>(activityCache_.size()));
         while (clipper.Step()) {
@@ -552,6 +569,7 @@ void App::drawActivityLog() {
                 if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) ImGui::SetClipboardText(e.text.c_str());
             }
         }
+        ImGui::PopStyleVar();
         if (ui::monoFont()) ImGui::PopFont();
         if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 4.0f) ImGui::SetScrollHereY(1.0f);
     }

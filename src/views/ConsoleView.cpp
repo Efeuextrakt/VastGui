@@ -53,6 +53,7 @@ void ConsoleView::draw(App& app) {
     ImGui::PushStyleColor(ImGuiCol_ChildBg, p.sidebar);
     if (ImGui::BeginChild("##console", ImVec2(0, 0), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar)) {
         if (ui::monoFont()) ImGui::PushFont(ui::monoFont(), 0.0f);
+        ui::PushCompactLines();
         const std::size_t start = cache_.size() > 600 ? cache_.size() - 600 : 0;
         for (std::size_t idx = start; idx < cache_.size(); ++idx) {
             const LogEntry& e = cache_[idx];
@@ -89,6 +90,7 @@ void ConsoleView::draw(App& app) {
             ImGui::PopID();
             ImGui::PopStyleColor();
         }
+        ImGui::PopStyleVar();
         if (ui::monoFont()) ImGui::PopFont();
         if (autoScroll_ && ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 4.0f) ImGui::SetScrollHereY(1.0f);
     }

@@ -317,7 +317,6 @@ void SettingsView::drawSearch(App& app) {
     d.minSamplesForMedian = std::clamp(d.minSamplesForMedian, 2, 1000);
     ImGui::SameLine();
     ImGui::TextUnformatted("offers)");
-    changed |= ImGui::Checkbox("Flag blacklisted machines and hosts", &d.checkBlacklist);
     if (changed) {
         app.markSettingsDirty();
         app.searchView().onBlacklistChanged(app);
@@ -364,7 +363,7 @@ void SettingsView::drawBlacklist(App& app) {
         if (ids.empty()) ui::TextDim("(empty)");
         ImGui::PopID();
     };
-    ui::TextDim("Hidden machines/hosts are treated as defective in search results. Right-click an offer to add one.");
+    ui::TextDim("Offers on these machines/hosts are hidden in Search (tick Blacklisted Machines there to show them, marked blacklisted). Right-click an offer to add one.");
     list("Machines", b.machines, addMachine_, "m");
     list("Hosts", b.hosts, addHost_, "h");
     if (changed) {

@@ -391,16 +391,16 @@ void TemplatesView::draw(App& app) {
     // Load each tab once when first shown; after an error only the Refresh button retries.
     if (!res.loaded && !res.loading && res.error.empty() && !needsKey) load(app, scope_, false);
 
-    // Same toolbar on every tab so switching never shifts the layout; the query only applies to Search.
+    // The query field only exists on the Search tab; Refresh / New template stay where they are.
     if (ui::BusyButton(ICON_FA_ARROWS_ROTATE, scope_ == kSearch ? "Search" : "Refresh", res.loading)) load(app, scope_, true);
-    ImGui::SameLine();
-    ImGui::BeginDisabled(scope_ != kSearch);
-    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 24);
-    if (ImGui::InputTextWithHint("##tq", "query, e.g. name=PyTorch or image=vastai/comfy", &query_,
-                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
-        load(app, kSearch, true);
+    if (scope_ == kSearch) {
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 24);
+        if (ImGui::InputTextWithHint("##tq", "query, e.g. name=PyTorch or image=vastai/comfy", &query_,
+                                     ImGuiInputTextFlags_EnterReturnsTrue)) {
+            load(app, kSearch, true);
+        }
     }
-    ImGui::EndDisabled();
     ImGui::SameLine();
     if (ui::SecondaryButton(ICON_FA_PLUS " New template")) {
         form_ = cmd::TemplateParams{};

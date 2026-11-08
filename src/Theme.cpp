@@ -146,7 +146,7 @@ void applyTheme(const std::string& theme, const std::array<float, 3>& accentRgb,
     c[ImGuiCol_TextDisabled] = p.textDim;
     c[ImGuiCol_WindowBg] = p.bg;
     c[ImGuiCol_ChildBg] = ImVec4(0, 0, 0, 0);
-    c[ImGuiCol_PopupBg] = p.dark ? ImVec4(p.panel.x, p.panel.y, p.panel.z, 0.98f) : p.panel;
+    c[ImGuiCol_PopupBg] = p.panel;  // opaque: text behind dropdowns must not shine through
     c[ImGuiCol_Border] = p.border;
     c[ImGuiCol_BorderShadow] = ImVec4(0, 0, 0, 0);
     c[ImGuiCol_FrameBg] = p.frame;

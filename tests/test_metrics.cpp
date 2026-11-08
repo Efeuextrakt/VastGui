@@ -14,6 +14,19 @@ TEST_SUITE("Metrics") {
         CHECK(dlpPerDollar(o).value() == doctest::Approx(100.0));
     }
 
+    TEST_CASE("credit run-out time") {
+        CHECK(creditRunOutHours(10.0, 1.0, {}).value() == doctest::Approx(10.0));
+        CHECK_FALSE(creditRunOutHours(10.0, 0.0, {}).has_value());  // nothing billed: never runs out
+        CHECK(creditRunOutHours(0.0, 1.0, {}).value() == doctest::Approx(0.0));
+        // A prepaid instance joins after 4 h at 1.5 $/hr: 4 h * 1 = 4, then 6 / 2.5 = 2.4 h more.
+        CHECK(creditRunOutHours(10.0, 1.0, {{4.0, 1.5}}).value() == doctest::Approx(6.4));
+        // Credit is gone before the prepaid credit ends.
+        CHECK(creditRunOutHours(3.0, 1.0, {{4.0, 1.5}}).value() == doctest::Approx(3.0));
+        // Only prepaid instances: nothing is billed until the first one's credit ends after 2 h; 0.5 $/hr for 8 h
+        // uses 4 of 5, then 1 $/hr for the last 1 -> 11 h.
+        CHECK(creditRunOutHours(5.0, 0.0, {{10.0, 0.5}, {2.0, 0.5}}).value() == doctest::Approx(11.0));
+    }
+
     TEST_CASE("offer price matches the vast.ai console") {
         // Real interruptible offer: dph_total = min bid + disk; the console adds 5 % of the GPU price (suggested bid).
         json j = {{"id", 55097271}, {"dph_total", 0.3481}, {"min_bid", 0.3333}, {"avail_vol_dph", 0.0004},

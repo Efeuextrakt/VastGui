@@ -203,6 +203,8 @@ struct Instance {
     }
 
     [[nodiscard]] bool isOutbid(double now = instanceNowEpoch()) const { return consoleStatus(now).outbid; }
+    // Reserved with prepaid credit left: billed from the instance's own credit, not from the account.
+    [[nodiscard]] bool prepaid() const { return creditBalance.value_or(0.0) > 0.0 && creditDiscount.value_or(0.0) > 0.0; }
 
     // Status label shown in the UI (same as the vast.ai console).
     [[nodiscard]] std::string displayStatus(double now = instanceNowEpoch()) const { return consoleStatus(now).label; }

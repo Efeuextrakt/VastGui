@@ -131,6 +131,34 @@ void BillingView::draw(App& app) {
         ImGui::SameLine(ImGui::GetFontSize() * 14);
         ImGui::BeginGroup();
         ui::TextDim(std::format("Balance: {}", fmt::money(jsonutil::optDouble(u, "balance"), st.currency, 2)).c_str());
+        if (!u.is_null()) {
+            // When the credit reaches 0 at the current instance costs (prepaid instances join when their credit ends).
+            const double credit = jsonutil::num(u, "credit", jsonutil::num(u, "balance", 0.0));
+            const App::AccountCost cost = app.accountCost();
+            const auto hours = creditRunOutHours(credit, cost.rate, cost.later);
+            const ui::Palette& p = ui::palette();
+            if (!hours) {
+                ui::TextDim(ICON_FA_HOURGLASS_HALF "  No instance costs - the credit does not run out");
+            } else if (*hours <= 0.0) {
+                ui::TextWithColor(p.danger, ICON_FA_HOURGLASS_END "  Credit used up");
+            } else {
+                const double at = fmt::nowEpoch() + *hours * 3600.0;
+                const ImVec4 c = *hours < 24.0 ? p.danger : *hours < 72.0 ? p.warning : p.text;
+                ui::TextWithColor(c, std::format(ICON_FA_HOURGLASS_HALF "  Runs out in {}  -  {}", fmt::humanDuration(*hours * 3600.0),
+                                                 fmt::dateTimeFromEpoch(at))
+                                         .c_str());
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Estimate at the current instance costs: %s/hr billed to the account%s.\n"
+                                  "Bandwidth, new rentals and price changes are not included.",
+                                  fmt::money(cost.rate, st.currency, 3).c_str(),
+                                  cost.prepaidCount > 0 ? std::format(", plus {} prepaid instance(s) at their normal price once their "
+                                                                      "prepaid credit is used up",
+                                                                      cost.prepaidCount)
+                                                              .c_str()
+                                                        : "");
+            }
+        }
         ui::TextDim(std::format("Account: {}  {}", jsonutil::str(u, "username"), jsonutil::str(u, "email")).c_str());
         if (auto thr = jsonutil::optDouble(u, "balance_threshold")) {
             ui::TextDim(std::format("Low-balance alert at {} ({})", fmt::money(*thr, st.currency, 2),

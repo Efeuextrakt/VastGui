@@ -89,6 +89,22 @@ std::optional<ReservedPlan> reservedPlanForAmount(double dphTotal, double maxDis
     return p;
 }
 
+std::optional<double> creditRunOutHours(double credit, double rate, std::vector<LaterCharge> later) {
+    if (!(credit > 0.0)) return 0.0;
+    std::sort(later.begin(), later.end(), [](const LaterCharge& a, const LaterCharge& b) { return a.afterHours < b.afterHours; });
+    double t = 0.0;
+    double left = credit;
+    for (const LaterCharge& c : later) {
+        const double until = std::max(c.afterHours, t);
+        if (rate > 0.0 && left - rate * (until - t) <= 0.0) return t + left / rate;
+        left -= rate * (until - t);
+        t = until;
+        rate += std::max(0.0, c.rate);
+    }
+    if (!(rate > 0.0)) return std::nullopt;
+    return t + left / rate;
+}
+
 std::optional<double> median(std::vector<double> values) {
     if (values.empty()) return std::nullopt;
     std::sort(values.begin(), values.end());

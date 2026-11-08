@@ -144,10 +144,10 @@ void to_json(json& j, const SearchFilters& f) {
     j["min_cuda"] = f.minCuda;
     j["min_driver"] = f.minDriver;
     j["min_ubuntu"] = f.minUbuntu;
-    j["raw_query"] = f.rawQuery;
     j["machine_ids"] = f.machineIds;
     j["host_ids"] = f.hostIds;
     j["show_defective"] = f.showDefective;
+    j["show_blacklisted"] = f.showBlacklisted;
     json ranges = json::object();
     for (const auto& m : kRangeMetas) {
         const Range& r = f.range(m.field);
@@ -196,7 +196,6 @@ void from_json(const json& j, SearchFilters& f) {
     f.minCuda = str(j, "min_cuda");
     f.minDriver = str(j, "min_driver");
     f.minUbuntu = str(j, "min_ubuntu");
-    f.rawQuery = str(j, "raw_query");
     f.machineIds = str(j, "machine_ids");
     f.hostIds = str(j, "host_ids");
     // Older versions: "hide_defective" (default true) plus a not-saved "show them" option.
@@ -205,6 +204,7 @@ void from_json(const json& j, SearchFilters& f) {
     } else {
         f.showDefective = !optBool(j, "hide_defective").value_or(true);
     }
+    f.showBlacklisted = optBool(j, "show_blacklisted").value_or(false);
     if (const json* r = find(j, "ranges"); r && r->is_object()) {
         for (const auto& m : kRangeMetas) {
             if (const json* rj = find(*r, m.id)) {

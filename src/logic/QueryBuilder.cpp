@@ -219,8 +219,6 @@ std::string QueryBuilder::buildQueryString(const SearchFilters& f) {
         if (r.max) add(std::format("{}<={}", m.queryField, formatNumber(*r.max * m.queryScale)));
     }
 
-    if (const auto raw = trim(f.rawQuery); !raw.empty()) add(raw);
-
     std::string out;
     for (const auto& p : parts) {
         if (!out.empty()) out += ' ';

@@ -277,6 +277,7 @@ void SearchView::recompute(App& app) {
     const auto order = sortedOrder(offers_, metrics_, f.sortKey, f.sortDesc);
     visible_.clear();
     defectiveCount_ = 0;
+    blacklistedCount_ = 0;
     hiddenDeverified_ = 0;
     hiddenIncompatible_ = 0;
     hiddenRented_ = 0;
@@ -294,6 +295,10 @@ void SearchView::recompute(App& app) {
         if (!f.showIncompatible && isIncompatible(offers_[idx], f)) {
             ++hiddenIncompatible_;
             continue;
+        }
+        if (defects_[idx].blacklisted()) {
+            ++blacklistedCount_;  // counts all blacklisted offers; they are only removed when not shown
+            if (!f.showBlacklisted) continue;
         }
         if (defects_[idx].defective()) {
             ++defectiveCount_;  // counts all defective offers; they are only removed when not shown
@@ -639,8 +644,6 @@ void SearchView::drawTopBar(App& app) {
         st.cardView = false;
         app.markSettingsDirty();
     }
-    ImGui::SameLine();
-    if (ui::BusyButton(ICON_FA_ARROWS_ROTATE, "Search", loading_)) search(app);
 }
 
 void SearchView::drawFilterPanel(App& app) {
@@ -726,6 +729,69 @@ void SearchView::drawFilterPanel(App& app) {
         }
     }
 
+    // Presets: pick one, then Save / Load / Reset.
+    ImGui::SeparatorText("Presets");
+    {
+        if (!selectedPreset_.empty() && !st.presets.contains(selectedPreset_)) selectedPreset_.clear();
+        const ImGuiStyle& style = ImGui::GetStyle();
+        const float comboW = ImGui::GetContentRegionAvail().x;
+        ImGui::SetNextItemWidth(comboW);
+        const char* preview = selectedPreset_.empty() ? (st.presets.empty() ? "No presets saved" : "Select a preset...")
+                                                      : selectedPreset_.c_str();
+        // Fixed popup width (= the dropdown): rows sized from the popup's own width would otherwise make an
+        // auto-sizing popup grow every frame up to the window border.
+        ImGui::SetNextWindowSizeConstraints(ImVec2(comboW, 0.0f), ImVec2(comboW, ImGui::GetFrameHeightWithSpacing() * 12.0f));
+        if (ImGui::BeginCombo("##presetsel", preview)) {
+            if (st.presets.empty()) ui::TextDim("Save the current filters to create one.");
+            std::string toDelete;
+            const float trashW = ImGui::CalcTextSize(ICON_FA_TRASH).x + style.FramePadding.x * 2.0f;
+            const float rowW = std::max(ImGui::GetFontSize() * 4.0f, ImGui::GetContentRegionAvail().x - trashW - style.ItemSpacing.x);
+            for (const auto& [name, preset] : st.presets) {
+                ImGui::PushID(name.c_str());
+                if (ImGui::Selectable(ui::Ellipsize(name, rowW - style.FramePadding.x).c_str(), name == selectedPreset_, 0, ImVec2(rowW, 0))) {
+                    selectedPreset_ = name;
+                }
+                if (ImGui::IsItemHovered() && ui::Ellipsize(name, rowW - style.FramePadding.x) != name) ImGui::SetTooltip("%s", name.c_str());
+                ImGui::SameLine();
+                if (ui::IconButton(ICON_FA_TRASH, "Delete this preset")) toDelete = name;
+                ImGui::PopID();
+            }
+            if (!toDelete.empty()) {
+                st.presets.erase(toDelete);
+                if (selectedPreset_ == toDelete) selectedPreset_.clear();
+                app.markSettingsDirty();
+            }
+            ImGui::EndCombo();
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Saved filter sets");
+        const float third = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * 2.0f) / 3.0f;
+        if (ui::SecondaryButton(ICON_FA_FLOPPY_DISK " Save", ImVec2(third, 0))) {
+            presetName_ = selectedPreset_;
+            openSavePreset_ = true;
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Save the current filters as a preset");
+        ImGui::SameLine();
+        ImGui::BeginDisabled(selectedPreset_.empty());
+        if (ui::SecondaryButton(ICON_FA_FOLDER_OPEN " Load", ImVec2(third, 0))) {
+            f = st.presets.at(selectedPreset_);
+            filtersChanged(app, true);
+            app.toasts().info("Loaded preset \"" + selectedPreset_ + "\"");
+        }
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip(selectedPreset_.empty() ? "Select a preset above first" : "Apply the selected preset");
+        }
+        ImGui::SameLine();
+        if (ui::SecondaryButton(ICON_FA_XMARK " Reset", ImVec2(third, 0))) {
+            SearchFilters fresh;
+            if (auto k = sortKeyFromId(st.defaultSort)) fresh.sortKey = *k;
+            fresh.sortDesc = st.defaultSortDesc;
+            f = fresh;
+            filtersChanged(app, true);
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reset all filters to the defaults");
+    }
+
     ImGui::SeparatorText("Reliability");
     {
         float rel = static_cast<float>(f.minReliability.value_or(0.0) * 100.0);
@@ -802,13 +868,22 @@ void SearchView::drawFilterPanel(App& app) {
         app.markSettingsDirty();
     }
     ui::HelpMarker("Show defective machines, marked with a red 'defective' tag and border. When off they are hidden.\n\n"
-                   "Defective: low reliability, missing inet/flops/dlperf/disk/CUDA values, performance far below the "
-                   "GPU model median, or on your blacklist (add machines from the Instances page or an offer's "
-                   "right-click menu). Thresholds are configurable in Settings.");
+                   "Defective: low reliability, missing inet/flops/dlperf/disk/CUDA values or performance far below "
+                   "the GPU model median. Thresholds are configurable in Settings.");
     // Always rendered (also when 0) so the panel layout never jumps.
     ImGui::Indent();
     ImGui::TextColored(defectiveCount_ > 0 && !f.showDefective ? p.warning : p.textDim, "%d defective offers %s",
                        defectiveCount_, f.showDefective ? "shown" : "hidden");
+    ImGui::Unindent();
+    if (ImGui::Checkbox("Blacklisted Machines", &f.showBlacklisted)) {
+        recompute(app);
+        app.markSettingsDirty();
+    }
+    ui::HelpMarker("Show offers on machines and hosts you blacklisted, marked with a grey 'blacklisted' tag and border. "
+                   "When off they are hidden.\n\nBlacklist machines from the Instances page or an offer's right-click "
+                   "menu; manage the list in Settings > Blacklist.");
+    ImGui::Indent();
+    ImGui::TextColored(p.textDim, "%d blacklisted offers %s", blacklistedCount_, f.showBlacklisted ? "shown" : "hidden");
     ImGui::Unindent();
     if (ImGui::Checkbox("Unavailable Offers", &f.showUnavailable)) filtersChanged(app, true);
     if (ImGui::Checkbox("Static IP Address", &f.staticIpOnly)) filtersChanged(app, true);
@@ -838,56 +913,15 @@ void SearchView::drawFilterPanel(App& app) {
             }
         }
     }
-
-    ImGui::SeparatorText("Raw Query");
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    if (ImGui::InputTextWithHint("##raw", "e.g. gpu_mem_bw>500 bw_nvlink>0", &f.rawQuery)) filtersChanged(app);
-    ui::TextDim("Merged after the GUI filters (vastai query syntax).");
-
-    ImGui::Spacing();
-    ImGui::Separator();
-    const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
-    if (ui::BusyButton(ICON_FA_ARROWS_ROTATE, "Search", loading_, true, ImVec2(half, 0))) search(app);
-    ImGui::SameLine();
-    if (ui::SecondaryButton(ICON_FA_XMARK " Reset filters", ImVec2(half, 0))) {
-        SearchFilters fresh;
-        if (auto k = sortKeyFromId(st.defaultSort)) fresh.sortKey = *k;
-        fresh.sortDesc = st.defaultSortDesc;
-        f = fresh;
-        filtersChanged(app, true);
-    }
-    if (ui::SecondaryButton(ICON_FA_FLOPPY_DISK " Save preset", ImVec2(half, 0))) {
-        presetName_.clear();
-        openSavePreset_ = true;
-    }
-    ImGui::SameLine();
-    if (ui::SecondaryButton(ICON_FA_FOLDER_OPEN " Load preset", ImVec2(half, 0))) ImGui::OpenPopup("##loadpreset");
-    if (ImGui::BeginPopup("##loadpreset")) {
-        if (st.presets.empty()) ui::TextDim("No presets saved yet.");
-        std::string toDelete;
-        for (const auto& [name, preset] : st.presets) {
-            ImGui::PushID(name.c_str());
-            if (ui::IconButton(ICON_FA_TRASH, "Delete preset")) toDelete = name;
-            ImGui::SameLine();
-            if (ImGui::Selectable(name.c_str())) {
-                f = preset;
-                filtersChanged(app, true);
-                app.toasts().info("Loaded preset \"" + name + "\"");
-            }
-            ImGui::PopID();
-        }
-        if (!toDelete.empty()) {
-            st.presets.erase(toDelete);
-            app.markSettingsDirty();
-        }
-        ImGui::EndPopup();
-    }
 }
 
 void SearchView::drawResults(App& app) {
     const ui::Palette& p = ui::palette();
 
-    // One fixed-height status line: content changes in place, nothing below it moves.
+    // One fixed-height status line: content changes in place, nothing below it moves. The Search button leads it,
+    // so it stays in the same place whatever the window width.
+    if (ui::BusyButton(ICON_FA_ARROWS_ROTATE, "Search", loading_)) search(app);
+    ImGui::SameLine();
     ImGui::AlignTextToFramePadding();
     ImGui::Text("%zu offers", visible_.size());
     if (ImGui::IsItemHovered() && mergedRequests_ > 0) {
@@ -942,6 +976,11 @@ void SearchView::drawResults(App& app) {
         ImGui::SameLine();
         ui::TextDim(std::format("- {} defective hidden", defectiveCount_).c_str());
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Tick 'Defective Machines' in Machine Options to show them.");
+    }
+    if (blacklistedCount_ > 0 && !app.settings().filters.showBlacklisted) {
+        ImGui::SameLine();
+        ui::TextDim(std::format("- {} blacklisted hidden", blacklistedCount_).c_str());
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Tick 'Blacklisted Machines' in Machine Options to show them.");
     }
     {
         const SearchFilters& sf = app.settings().filters;
@@ -1137,6 +1176,11 @@ void SearchView::drawTable(App& app) {
                         ImGui::SameLine();
                         ui::TextWithColor(ui::palette().danger, "defective");
                         if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", fmt::join(defects_[idx].reasons, "\n").c_str());
+                    }
+                    if (defects_[idx].blacklisted()) {
+                        ImGui::SameLine();
+                        ui::TextWithColor(ui::palette().textDim, "blacklisted");
+                        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", fmt::join(defects_[idx].blacklistReasons, "\n").c_str());
                     }
                 } else if (c == ColPrice) {
                     ImGui::TextUnformatted(textCell(c, o, m, st.currency).c_str());
@@ -1577,6 +1621,7 @@ void SearchView::drawPresetPopups(App& app) {
     ImGui::BeginDisabled(name.empty());
     if (ImGui::Button("Save", ImVec2(ImGui::GetFontSize() * 7, 0)) || (enter && !name.empty())) {
         app.settings().presets[name] = app.settings().filters;
+        selectedPreset_ = name;
         app.markSettingsDirty();
         app.toasts().success("Preset \"" + name + "\" saved");
         ImGui::CloseCurrentPopup();
