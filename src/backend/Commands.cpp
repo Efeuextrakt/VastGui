@@ -624,11 +624,11 @@ ApiCall showApiKeys() {
     return c;
 }
 
-ApiCall createApiKey(const std::string& name, const std::string& permissionsJson) {
-    json perms = json::parse(permissionsJson, nullptr, false);
-    if (perms.is_discarded()) perms = json::object();
+ApiCall createApiKey(const std::string& name, const json& permissions) {
     ApiCall c = make("Create API key", rest(HttpMethod::Post, "/auth/apikeys/",
-                                            json{{"name", name}, {"permissions", perms}, {"key_params", nullptr}}));
+                                            json{{"name", name},
+                                                 {"permissions", permissions.is_object() ? permissions : json::object()},
+                                                 {"key_params", nullptr}}));
     c.sensitiveOutput = true;
     return c;
 }

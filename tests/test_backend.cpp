@@ -154,7 +154,7 @@ TEST_SUITE("Backend") {
         CHECK(cmd::createEnvVar("HF_TOKEN", "hf_secret_value").sensitiveOutput);
         CHECK(cmd::showEnvVars().sensitiveOutput);
         CHECK(cmd::showApiKeys().sensitiveOutput);
-        const ApiCall k = cmd::createApiKey("ci", "{\"api\": {}}");
+        const ApiCall k = cmd::createApiKey("ci", json{{"api", json::object()}});
         CHECK(k.sensitiveOutput);
         CHECK((*k.rest.body)["permissions"] == json{{"api", json::object()}});
         CHECK(cmd::showUser().rest.transform == RestTransform::StripApiKey);

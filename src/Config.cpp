@@ -81,7 +81,6 @@ void to_json(json& j, const Settings& s) {
     j["instance_columns"] = boolsToJson(s.instanceColumns);
     j["sidebar_collapsed"] = s.sidebarCollapsed;
     j["show_activity_log"] = s.showActivityLog;
-    j["api_keys_split"] = s.apiKeysSplit;
     j["gpu_models"] = s.gpuModels;
 }
 
@@ -177,7 +176,6 @@ void readSettings(const json& j, Settings& s, std::vector<std::string>* problems
     s.instanceColumns = boolsFromJson(j, "instance_columns");
     s.sidebarCollapsed = optBool(j, "sidebar_collapsed").value_or(false);
     s.showActivityLog = optBool(j, "show_activity_log").value_or(true);
-    s.apiKeysSplit = static_cast<float>(std::clamp(optDouble(j, "api_keys_split").value_or(0.58), 0.15, 0.85));
     if (const json* g = find(j, "gpu_models"); g && g->is_array()) {
         for (const auto& name : *g) {
             if (name.is_string() && !name.get<std::string>().empty()) s.gpuModels.push_back(name.get<std::string>());

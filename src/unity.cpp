@@ -19,6 +19,7 @@
 #include "logic/DockerOptions.cpp"
 #include "logic/Format.cpp"
 #include "logic/GpuCatalog.cpp"
+#include "logic/ApiKeyPermissions.cpp"
 #include "logic/Metrics.cpp"
 #include "logic/QueryBuilder.cpp"
 #include "logic/Regions.cpp"

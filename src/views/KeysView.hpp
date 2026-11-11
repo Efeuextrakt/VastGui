@@ -18,6 +18,10 @@ public:
 private:
     void drawSsh(App& app);
     void drawApiKeys(App& app);
+    void openCreateApiKey(App& app);
+    void drawCreateApiKey(App& app);
+    void drawPermissionTable(App& app);
+    void setApiPermissions(json perms);  // also refreshes the Advanced JSON text
     void drawEnvVars(App& app);
 
     Resource ssh_;
@@ -32,9 +36,14 @@ private:
     bool openAttach_ = false;
     int attachInstance_ = -1;
 
+    // "Create API Key" dialog. The form keeps its content when closed without creating a key.
     std::string newApiName_;
-    std::string newApiPermissions_ =
-        "{\n  \"api\": {\n    \"misc\": {},\n    \"user_read\": {},\n    \"instance_read\": {},\n    \"instance_write\": {}\n  }\n}";
+    json newApiPerms_ = json{{"api", json::object()}};  // {"api": {...}}
+    std::string newApiPermsText_;                       // Advanced tab (JSON), kept in sync with newApiPerms_
+    bool newApiPermsValid_ = true;
+    bool newApiInitialized_ = false;
+    bool openCreateApi_ = false;
+    int permTab_ = 0;  // 0 Standard, 1 Advanced
     std::string createdKey_;  // shown exactly once, wiped when the dialog closes
     bool openCreatedKey_ = false;
     json pendingApi_;

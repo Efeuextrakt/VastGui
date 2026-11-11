@@ -203,7 +203,8 @@ struct WorkergroupParams {
 [[nodiscard]] ApiCall updateSshKey(Id id, const std::string& publicKey);
 [[nodiscard]] ApiCall deleteSshKey(Id id);
 [[nodiscard]] ApiCall showApiKeys();
-[[nodiscard]] ApiCall createApiKey(const std::string& name, const std::string& permissionsJson);
+// `permissions` is {"api": {...}} as built by logic/ApiKeyPermissions (or edited as JSON).
+[[nodiscard]] ApiCall createApiKey(const std::string& name, const json& permissions);
 [[nodiscard]] ApiCall deleteApiKey(Id id);
 [[nodiscard]] ApiCall showEnvVars();
 [[nodiscard]] ApiCall createEnvVar(const std::string& name, const std::string& value);

@@ -48,7 +48,7 @@ class HostingView;
 class ConsoleView;
 class SettingsView;
 
-inline constexpr const char* kAppVersion = "1.4.1";
+inline constexpr const char* kAppVersion = "1.4.2";
 
 class App {
 public:

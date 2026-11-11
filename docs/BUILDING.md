@@ -79,7 +79,8 @@ src/App.*       state, navigation, sidebar, docking, status bar, fonts; Theme.* 
                 SecretBox.* (API key encryption at rest)
 src/backend/    ApiCall.hpp, Commands (REST request catalogue), RestBackend, Http, ThreadPool.hpp, VastClient, ApiKey
 src/model/      Offer, Instance, Template, Machine (+ tolerant JSON accessors)
-src/logic/      QueryBuilder, Metrics, DefectFilter, SearchFilters, Regions, Format, DockerOptions (no ImGui)
+src/logic/      QueryBuilder, Metrics, DefectFilter, SearchFilters, Regions, Format, DockerOptions, GpuCatalog,
+                ApiKeyPermissions (no ImGui)
 src/views/      Search, Instances, Templates, Storage, Serverless, Billing(+Earnings), Team(+Audit logs),
                 Keys, Hosting, Console (Activity log page), Settings
 src/widgets/    OfferCard, RangeSlider, Toast, Spinner, Badge, Widgets (JSON table/tree, buttons)

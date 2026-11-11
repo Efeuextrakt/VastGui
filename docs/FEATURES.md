@@ -128,9 +128,25 @@ search to search because the server keeps sampling. Each request at limit 1000 d
   used up, at their normal price. Bandwidth, new rentals and price changes are not included.
 - Invoices and charges for a date range, chart and CSV export.
 
+## Keys
+
+- SSH keys (add from file or `~/.ssh/id_ed25519.pub`, attach to instances), environment variables (secrets), and
+  API keys.
+- **Create API key** opens a dialog like the vast.ai console:
+  - *Standard*: a table of types (User, Instances, Billing/Earning, Machines, Team, Admin, Miscellaneous) with
+    *Read* / *Write* checkboxes (*Enabled* for Miscellaneous). Only types your current key has are listed, and
+    *Write* is greyed out where your key can only read. *Write* includes *Read*; unticking *Read* also removes
+    *Write*.
+  - *2FA* switch per permission (`"constraints": {"tfa": {"eq": true}}` on that permission) or *Require 2FA for
+    this key* (the same constraint on the whole key).
+  - *Advanced*: the resulting permissions JSON, editable and kept in sync with the table.
+  - Tooltips explain every type, Read, Write and 2FA. The form starts with everything your current key may do
+    (except admin); name 3-50 characters, at least one permission.
+  - The new key is shown once in a separate dialog (copy button) and never logged.
+
 ## Other pages
 
-**Storage, Serverless, Earnings, Members/Team, Audit Logs, Keys, Hosting, Activity log,
+**Storage, Serverless, Earnings, Members/Team, Audit Logs, Hosting, Activity log,
 Settings** - see the in-app pages. Every action logs the API request it sends (`> PUT /api/v0/...`, never the
 request body) in the Activity log.
 

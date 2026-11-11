@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.4.2 - 2026-11-11
+
+### Keys
+- *Create API key* is now a dialog like the vast.ai console (button next to *Refresh*; the list uses the full
+  width). Instead of typing JSON you tick permissions in a table:
+  - **Standard**: Read / Write per type (User, Instances, Billing/Earning, Machines, Team, Admin) and *Enabled* for
+    Miscellaneous. Only types your current key has are offered, and Write is greyed out where your key can only
+    read. Write includes Read; unticking Read also removes Write.
+  - **2FA** switch per permission, or *Require 2FA for this key* for all of them.
+  - **Advanced**: the generated permissions as JSON, editable and kept in sync with the table.
+  - Tooltips explain every type, Read, Write and 2FA; *Read more* opens vast.ai's permission docs.
+  - Starts with everything your current key may do (except admin), like the console. The name must be 3-50
+    characters and at least one permission must be selected.
+  The request is identical to the console's (`{"api": {"user_read": {}, "instance_read": {"constraints": {"tfa":
+  {"eq": true}}}, ...}}`).
+
 ## 1.4.1 - 2026-11-08
 
 ### Search

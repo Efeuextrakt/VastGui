@@ -64,8 +64,8 @@ TP_SOURCES=(
 )
 TEST_SOURCES=(
     tests/tests_main.cpp tests/test_query_builder.cpp tests/test_metrics.cpp tests/test_defect_filter.cpp
-    tests/test_backend.cpp tests/test_security.cpp tests/test_gpu_catalog.cpp src/logic/QueryBuilder.cpp src/logic/SearchFilters.cpp src/logic/Metrics.cpp
-    src/logic/DefectFilter.cpp src/logic/Regions.cpp src/logic/Format.cpp src/logic/DockerOptions.cpp src/logic/GpuCatalog.cpp
+    tests/test_backend.cpp tests/test_security.cpp tests/test_gpu_catalog.cpp tests/test_api_permissions.cpp src/logic/QueryBuilder.cpp src/logic/SearchFilters.cpp src/logic/Metrics.cpp
+    src/logic/DefectFilter.cpp src/logic/Regions.cpp src/logic/Format.cpp src/logic/DockerOptions.cpp src/logic/GpuCatalog.cpp src/logic/ApiKeyPermissions.cpp
     src/backend/Commands.cpp src/backend/RestBackend.cpp src/backend/Http.cpp
     src/backend/ApiKey.cpp src/Platform.cpp src/Log.cpp src/SecretBox.cpp src/Config.cpp
     src/backend/VastClient.cpp third_party/monocypher/monocypher_cpp.cpp

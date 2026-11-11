@@ -7,6 +7,7 @@
 #include "Theme.hpp"
 #include "backend/Commands.hpp"
 #include "imgui.h"
+#include "logic/ApiKeyPermissions.hpp"
 #include "logic/Format.hpp"
 #include "widgets/Spinner.hpp"
 
@@ -180,20 +181,248 @@ void KeysView::drawSsh(App& app) {
     }
 }
 
+void KeysView::setApiPermissions(json perms) {
+    newApiPerms_ = std::move(perms);
+    newApiPermsText_ = newApiPerms_.dump(4);
+    newApiPermsValid_ = true;
+}
+
+void KeysView::openCreateApiKey(App& app) {
+    if (!newApiInitialized_) {
+        // Like the console: start with everything the current key may do (except admin).
+        const json* rights = jsonutil::find(app.user(), "rights");
+        json perms = apiperm::defaultPermissions(rights ? *rights : json());
+        if (!apiperm::hasAnyPermission(perms["api"])) {
+            // Rights unknown (user not loaded / not reported): a safe everyday set.
+            perms = json{{"api",
+                          {{"user_read", json::object()},
+                           {"instance_read", json::object()},
+                           {"instance_write", json::object()},
+                           {"misc", json::object()}}}};
+        }
+        setApiPermissions(std::move(perms));
+        newApiInitialized_ = true;
+    }
+    if (app.user().is_null()) app.refreshUser();
+    openCreateApi_ = true;
+}
+
+void KeysView::drawPermissionTable(App& app) {
+    using apiperm::Level;
+    const ui::Palette& p = ui::palette();
+    const float fs = ImGui::GetFontSize();
+    json& api = newApiPerms_["api"];
+    if (!api.is_object()) api = json::object();
+    const json* rights = jsonutil::find(app.user(), "rights");
+    const auto grant = apiperm::grantable(rights ? *rights : json());
+    const bool rightsKnown = !grant.empty();
+    const bool tfaAll = apiperm::tfaAll(api);
+    bool changed = false;
+
+    // Standard changes keep only the permissions shown here (like the console); Advanced keeps everything.
+    auto setLevel = [&](const char* cat, Level l) {
+        api = apiperm::withLevel(apiperm::onlyKnownKeys(api), cat, l);
+        changed = true;
+    };
+    auto tfaSwitch = [&](const char* id, const std::string& key, bool granted) {
+        bool on = apiperm::tfa(api, key);
+        ImGui::BeginDisabled(!granted);
+        if (ui::ToggleSwitch(id, &on)) {
+            api = apiperm::withTfa(api, key, on);
+            changed = true;
+        }
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip(granted ? "Require two-factor authentication (2FA) for requests that use this permission."
+                                      : "Grant the permission first.");
+        }
+    };
+
+    const int cols = tfaAll ? 3 : 5;
+    const ImGuiTableFlags tf = ImGuiTableFlags_Borders | ImGuiTableFlags_PadOuterX | ImGuiTableFlags_SizingStretchProp;
+    if (ImGui::BeginTable("##perms", cols, tf)) {
+        ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthStretch, 1.3f);
+        ImGui::TableSetupColumn("Permission", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+        if (!tfaAll) ImGui::TableSetupColumn("2FA", ImGuiTableColumnFlags_WidthFixed, fs * 2.6f);
+        ImGui::TableSetupColumn("Permission##w", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+        if (!tfaAll) ImGui::TableSetupColumn("2FA##w", ImGuiTableColumnFlags_WidthFixed, fs * 2.6f);
+        ImGui::TableHeadersRow();
+        const int colRead = 1, colReadTfa = 2, colWrite = tfaAll ? 2 : 3, colWriteTfa = 4;
+
+        for (const apiperm::Category& c : apiperm::categories()) {
+            const std::string_view key = c.key;
+            // Rows the current key cannot grant are hidden (admin unless the key has it; unknown rights: no admin).
+            const auto g = grant.find(c.key);
+            if (rightsKnown ? g == grant.end() : key == "admin") continue;
+            const Level maxLevel = rightsKnown ? g->second : Level::ReadWrite;
+            const Level level = apiperm::levelOf(api, key);
+            ImGui::TableNextRow();
+            ImGui::PushID(c.key);
+
+            ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(c.label);
+            ImGui::SameLine(0, fs * 0.4f);
+            ui::TextDim(ICON_FA_CIRCLE_INFO);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetNextWindowSize(ImVec2(fs * 22.0f, 0));
+                ImGui::BeginTooltip();
+                ImGui::TextWrapped("%s", c.tooltip);
+                ImGui::EndTooltip();
+            }
+
+            ImGui::TableSetColumnIndex(colRead);
+            if (key == "misc") {
+                bool on = level != Level::NoAccess;
+                if (ImGui::Checkbox("Enabled", &on)) setLevel(c.key, on ? Level::ReadWrite : Level::NoAccess);
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", c.tooltip);
+                if (!tfaAll) {
+                    ImGui::TableSetColumnIndex(colReadTfa);
+                    tfaSwitch("##tfa", "misc", on);
+                }
+            } else {
+                bool read = level != Level::NoAccess;
+                if (ImGui::Checkbox("Read", &read)) setLevel(c.key, read ? Level::Read : Level::NoAccess);
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("%s: view only (list and show), no changes.%s", c.label,
+                                      level == Level::ReadWrite ? "\nUnticking Read also removes Write." : "");
+                }
+                if (!tfaAll) {
+                    ImGui::TableSetColumnIndex(colReadTfa);
+                    tfaSwitch("##tfar", apiperm::readKey(key), read);
+                }
+                ImGui::TableSetColumnIndex(colWrite);
+                bool write = level == Level::ReadWrite;
+                const bool canWrite = maxLevel == Level::ReadWrite;
+                ImGui::BeginDisabled(!canWrite);
+                if (ImGui::Checkbox("Write", &write)) setLevel(c.key, write ? Level::ReadWrite : Level::Read);
+                ImGui::EndDisabled();
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                    if (canWrite) {
+                        ImGui::SetTooltip("%s: create, change and delete. Includes Read.", c.label);
+                    } else {
+                        ImGui::SetTooltip("Your current API key can only read %s, so it cannot grant Write.", c.label);
+                    }
+                }
+                if (!tfaAll) {
+                    ImGui::TableSetColumnIndex(colWriteTfa);
+                    tfaSwitch("##tfaw", apiperm::writeKey(key), write);
+                }
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
+    if (!rightsKnown) {
+        ui::TextWithColor(p.warning, ICON_FA_TRIANGLE_EXCLAMATION "  Your key's own rights are unknown - all types are offered; "
+                                                                  "vast.ai rejects permissions your key does not have.");
+    }
+    if (changed) setApiPermissions(newApiPerms_);
+}
+
+void KeysView::drawCreateApiKey(App& app) {
+    const ui::Palette& p = ui::palette();
+    const float fs = ImGui::GetFontSize();
+    if (openCreateApi_) {
+        ImGui::OpenPopup("Create API Key###createapikey");
+        openCreateApi_ = false;
+    }
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(fs * 40.0f, 0), ImVec2(fs * 40.0f, ImGui::GetMainViewport()->WorkSize.y * 0.9f));
+    if (!ui::BeginDialog("Create API Key###createapikey", ImGuiWindowFlags_AlwaysAutoResize)) return;
+
+    ui::TextDim("Name");
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    if (ImGui::InputTextWithHint("##apiname", "3-50 characters", &newApiName_) && newApiName_.size() > 50) newApiName_.resize(50);
+    const std::size_t nameLen = fmt::trim(newApiName_).size();
+    if (nameLen > 0 && nameLen < 3) ui::TextWithColor(p.danger, "Name must be between 3 and 50 characters");
+
+    if (!newApiPerms_["api"].is_object()) newApiPerms_["api"] = json::object();
+    ImGui::Spacing();
+    if (permTab_ == 0) {
+        bool all = apiperm::tfaAll(newApiPerms_["api"]);
+        if (ui::ToggleSwitch("Require 2FA for this key or customize below", &all)) {
+            json perms = newApiPerms_;
+            perms["api"] = apiperm::withTfaAll(perms["api"], all);
+            setApiPermissions(std::move(perms));
+        }
+        ui::HelpMarker("On: every request made with this key requires two-factor authentication (2FA). "
+                       "Off: choose 2FA per permission in the table below.");
+    }
+
+    if (ImGui::BeginTabBar("##permtabs")) {
+        if (ImGui::BeginTabItem("Standard")) {
+            if (permTab_ != 0 && !newApiPermsValid_) setApiPermissions(newApiPerms_);  // drop an invalid edit
+            permTab_ = 0;
+            ImGui::PushTextWrapPos(0.0f);
+            ui::TextDim("Changing Standard selections keeps only the permissions shown below. Use Advanced to customize "
+                        "other scopes.");
+            ImGui::PopTextWrapPos();
+            drawPermissionTable(app);
+            if (ImGui::TextLink("Read more")) platform::openUrl("https://docs.vast.ai/api-reference/permissions");
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Advanced")) {
+            permTab_ = 1;
+            ui::TextDim("Permissions as JSON - edit freely, the Standard tab follows.");
+            if (ui::monoFont()) ImGui::PushFont(ui::monoFont(), 0.0f);
+            if (ImGui::InputTextMultiline("##apiperm", &newApiPermsText_, ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 18),
+                                          ImGuiInputTextFlags_AllowTabInput)) {
+                const json parsed = json::parse(newApiPermsText_, nullptr, false);
+                newApiPermsValid_ = !parsed.is_discarded() && parsed.is_object();
+                if (newApiPermsValid_) newApiPerms_ = parsed;
+            }
+            if (ui::monoFont()) ImGui::PopFont();
+            if (!newApiPermsValid_) ui::TextWithColor(p.danger, "Invalid JSON");
+            if (ImGui::TextLink("Permission syntax")) platform::openUrl("https://docs.vast.ai/api-reference/permissions");
+            ImGui::EndTabItem();
+        }
+        ImGui::EndTabBar();
+    }
+
+    ImGui::Separator();
+    const json* finalApi = jsonutil::find(newApiPerms_, "api");
+    const bool anyPerm = finalApi && apiperm::hasAnyPermission(*finalApi);
+    const char* why = nameLen < 3 || nameLen > 50 ? "Enter a name (3-50 characters)."
+                      : !newApiPermsValid_       ? "Fix the JSON first."
+                      : !anyPerm                 ? "Select at least one permission."
+                                                 : nullptr;
+    if (why) {
+        ImGui::AlignTextToFramePadding();
+        ui::TextDim(why);
+    } else {
+        ImGui::AlignTextToFramePadding();
+        ui::TextDim("The new key is shown once and never logged.");
+    }
+    const float btnW = fs * 7.0f;
+    ImGui::SameLine(ImGui::GetContentRegionMax().x - btnW * 2.0f - ImGui::GetStyle().ItemSpacing.x);
+    if (ui::SecondaryButton("Cancel", ImVec2(btnW, 0))) ImGui::CloseCurrentPopup();
+    ImGui::SameLine();
+    ImGui::BeginDisabled(why != nullptr);
+    if (ImGui::Button(ICON_FA_KEY " Create", ImVec2(btnW, 0))) {
+        app.run(cmd::createApiKey(fmt::trim(newApiName_), newApiPerms_), [this, &app](const ApiResult& r) {
+            createdKey_ = findSecret(r.data.is_null() ? json(r.text) : r.data);
+            if (createdKey_.empty()) createdKey_ = fmt::trim(r.text);
+            openCreatedKey_ = true;
+            apiKeys_.fetch(app, cmd::showApiKeys());
+            // Next time the form starts fresh.
+            newApiName_.clear();
+            newApiInitialized_ = false;
+            permTab_ = 0;
+        });
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndDisabled();
+    ImGui::EndPopup();
+}
+
 void KeysView::drawApiKeys(App& app) {
     apiKeys_.autoFetch(app, cmd::showApiKeys());
     if (ui::BusyButton(ICON_FA_ARROWS_ROTATE, "Refresh", apiKeys_.loading)) apiKeys_.fetch(app, cmd::showApiKeys());
+    ImGui::SameLine();
+    if (ImGui::Button(ICON_FA_PLUS " Create API key")) openCreateApiKey(app);
     ui::InlineError(apiKeys_.error);
 
-    // A visible separator between the list and the Create panel can be dragged sideways (ratio kept in VastGui.json).
-    Settings& st = app.settings();
-    const float avail = ImGui::GetContentRegionAvail().x;
-    const float em = ImGui::GetFontSize();
-    const float splitW = ui::VSplitterWidth();
-    const float minList = std::min(em * 12.0f, avail * 0.4f);
-    const float maxList = std::max(minList, avail - splitW - em * 16.0f);
-    float listW = std::clamp(avail * st.apiKeysSplit, minList, maxList);
-    ImGui::BeginChild("##apilist", ImVec2(listW, 0));
     ui::JsonTableOptions opts;
     opts.preferredColumns = {"id", "name", "created_at", "permissions", "key"};
     opts.formatCell = maskKeyCell;
@@ -204,34 +433,8 @@ void KeysView::drawApiKeys(App& app) {
         }
     };
     ui::JsonTable("##apikeys", jsonutil::extractArray(apiKeys_.data, {"apikeys", "keys", "results"}), apiTable_, opts);
-    ImGui::EndChild();
-    ImGui::SameLine(0, 0);
-    const bool released = ui::VSplitter("##apisplit", &listW, minList, maxList);
-    if ((ImGui::IsItemActive() || released) && avail > 0.0f) st.apiKeysSplit = std::clamp(listW / avail, 0.15f, 0.85f);
-    if (released) app.markSettingsDirty();
-    ImGui::SameLine(0, 0);
-    ImGui::BeginChild("##apiform", ImVec2(0, 0), ImGuiChildFlags_Borders);
-    ui::SectionTitle(ICON_FA_PLUS, "Create API key");
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::InputTextWithHint("##apiname", "key name", &newApiName_);
-    ui::TextDim("Permissions (JSON):");
-    if (ui::monoFont()) ImGui::PushFont(ui::monoFont(), 0.0f);
-    ImGui::InputTextMultiline("##apiperm", &newApiPermissions_, ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 10));
-    if (ui::monoFont()) ImGui::PopFont();
-    const bool valid = !json::parse(newApiPermissions_, nullptr, false).is_discarded();
-    if (!valid) ui::TextWithColor(ui::palette().danger, "Invalid JSON");
-    ImGui::BeginDisabled(!valid || fmt::trim(newApiName_).empty());
-    if (ImGui::Button(ICON_FA_KEY " Create key")) {
-        app.run(cmd::createApiKey(fmt::trim(newApiName_), newApiPermissions_), [this, &app](const ApiResult& r) {
-            createdKey_ = findSecret(r.data.is_null() ? json(r.text) : r.data);
-            if (createdKey_.empty()) createdKey_ = fmt::trim(r.text);
-            openCreatedKey_ = true;
-            apiKeys_.fetch(app, cmd::showApiKeys());
-        });
-    }
-    ImGui::EndDisabled();
-    ui::TextDim("The new key is shown once and never logged.");
-    ImGui::EndChild();
+
+    drawCreateApiKey(app);
 
     if (openCreatedKey_) {
         ImGui::OpenPopup("New API key###newkey");
