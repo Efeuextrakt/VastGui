@@ -39,6 +39,11 @@
 - **Blacklisted machines** are not "defective": blacklist a machine with the Ban button on the Instances page or an
   offer's right-click menu (manage the list in Settings > Blacklist). Their offers are hidden; tick *Blacklisted
   Machines* in *Machine Options* to list them with a grey *blacklisted* tag and border.
+- **Favorite machines**: the star button on the Instances page (next to the Ban button) or an offer's right-click
+  menu adds a machine (manage the list in Settings > Favorites). Their offers get a gold star and border (table:
+  gold ID with a star). *Favorites Only* in *Machine Options* searches only them - asked from vast.ai directly like
+  the Machine IDs field, so they are found outside the random sample. A machine is never favorite and blacklisted
+  at once: adding it to one list removes it from the other.
   Deverified offers are only listed when *Unverified Machines* and its sub-option *Deverified Machines* are ticked.
   Verification tags: verified green, unverified yellow, deverified orange.
 - **Incompatible machines**: offers that fail the selected template's requirements (its `extra_filters`, e.g.
@@ -106,8 +111,8 @@ search to search because the server keeps sampling. Each request at limit 1000 d
   line numbers, compact line spacing, auto-refresh, save to file;
   tail defaults to 1000 lines, -/+ step 1000, *Max* = 20000.
 - Copy SSH command / SCP URL, open Jupyter, change bid, prepay, deposit, execute, copy files (between remote
-  locations), cloud copy, snapshot, attach SSH key, create template from instance, recycle, update, blacklist the
-  machine.
+  locations), cloud copy, snapshot, attach SSH key, create template from instance, recycle, update, favorite or
+  blacklist the machine (star and ban buttons next to each other; gold / red while active).
 - GPU/CPU/VRAM/disk usage bars, TFLOPS/$/hr and DLP/$/hr per instance and an ImPlot $/hr sparkline per instance.
 - **Reserved discount** (*Reserve* column / row menu *Add a Reserved Discount...*): a *Save NN%* badge shows the
   best discount the host offers (*Saved NN%* once reserved). It opens a dialog like the web console with

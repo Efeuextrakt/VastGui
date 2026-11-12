@@ -148,6 +148,7 @@ void to_json(json& j, const SearchFilters& f) {
     j["host_ids"] = f.hostIds;
     j["show_defective"] = f.showDefective;
     j["show_blacklisted"] = f.showBlacklisted;
+    j["favorites_only"] = f.favoritesOnly;
     json ranges = json::object();
     for (const auto& m : kRangeMetas) {
         const Range& r = f.range(m.field);
@@ -205,6 +206,7 @@ void from_json(const json& j, SearchFilters& f) {
         f.showDefective = !optBool(j, "hide_defective").value_or(true);
     }
     f.showBlacklisted = optBool(j, "show_blacklisted").value_or(false);
+    f.favoritesOnly = optBool(j, "favorites_only").value_or(false);
     if (const json* r = find(j, "ranges"); r && r->is_object()) {
         for (const auto& m : kRangeMetas) {
             if (const json* rj = find(*r, m.id)) {

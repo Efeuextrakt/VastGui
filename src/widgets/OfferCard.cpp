@@ -81,7 +81,7 @@ void OfferPriceTooltip(const Offer& o, const CurrencyFormat& c, std::optional<do
     ImGui::EndTooltip();
 }
 
-OfferAction OfferContextMenuItems(const Offer& o, bool canRent) {
+OfferAction OfferContextMenuItems(const Offer& o, bool canRent, bool favorite) {
     OfferAction a = OfferAction::None;
     if (ImGui::MenuItem(ICON_FA_ROCKET "  Rent...", nullptr, false, canRent)) a = OfferAction::Rent;
     ImGui::Separator();
@@ -96,6 +96,10 @@ OfferAction OfferContextMenuItems(const Offer& o, bool canRent) {
     }
     if (ImGui::MenuItem(ICON_FA_CODE "  View raw JSON")) a = OfferAction::ViewJson;
     ImGui::Separator();
+    if (ImGui::MenuItem(favorite ? ICON_FA_STAR "  Remove machine from favorites" : ICON_FA_STAR "  Add machine to favorites",
+                        nullptr, false, o.machineId.has_value())) {
+        a = OfferAction::ToggleFavorite;
+    }
     if (ImGui::MenuItem(ICON_FA_EYE_SLASH "  Hide this host", nullptr, false, o.hostId.has_value())) a = OfferAction::HideHost;
     if (ImGui::MenuItem(ICON_FA_BAN "  Hide this machine", nullptr, false, o.machineId.has_value())) {
         a = OfferAction::HideMachine;
@@ -111,9 +115,10 @@ OfferAction OfferCard(const Offer& o, const OfferMetrics& m, const DefectInfo& d
 
     ImGui::PushID(static_cast<int>(o.id));
     ImGui::PushStyleColor(ImGuiCol_ChildBg, p.card);
-    // Rented by you: bluish border; defective: reddish; blacklisted: grey (the card is not dimmed).
+    // Rented by you: bluish border; defective: reddish; favorite: gold; blacklisted: grey (the card is not dimmed).
     const ImVec4 border = ctx.rentedByMe     ? p.info
                           : d.defective()   ? ImVec4(p.danger.x, p.danger.y, p.danger.z, 0.6f)
+                          : ctx.favorite    ? ImVec4(p.caution.x, p.caution.y, p.caution.z, 0.8f)
                           : d.blacklisted() ? ImVec4(p.textDim.x, p.textDim.y, p.textDim.z, 0.7f)
                                             : p.border;
     ImGui::PushStyleColor(ImGuiCol_Border, border);
@@ -139,6 +144,12 @@ OfferAction OfferCard(const Offer& o, const OfferMetrics& m, const DefectInfo& d
         // Left: identity + GPU.
         ImGui::TableSetColumnIndex(0);
         dimLine(std::format("m:{}  host:{}", o.machineId.value_or(0), o.hostId.value_or(0)));
+        // Favorite: gold star on the same line, so the card height never changes.
+        if (ctx.favorite) {
+            ImGui::SameLine();
+            TextWithColor(p.caution, ICON_FA_STAR);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Favorite machine\n\nManage favorites in Settings.");
+        }
         // "Blacklisted" badge on an existing line so the card height never changes; shortened when narrow.
         auto blacklistBadge = [&] {
             if (!d.blacklisted()) return;
@@ -253,7 +264,7 @@ OfferAction OfferCard(const Offer& o, const OfferMetrics& m, const DefectInfo& d
     }
 
     if (ImGui::BeginPopupContextWindow("##offerctx")) {
-        if (auto a = OfferContextMenuItems(o, !ctx.rentedByMe); a != OfferAction::None) action = a;
+        if (auto a = OfferContextMenuItems(o, !ctx.rentedByMe, ctx.favorite); a != OfferAction::None) action = a;
         ImGui::EndPopup();
     }
     ImGui::EndChild();

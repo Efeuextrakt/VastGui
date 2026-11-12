@@ -131,6 +131,8 @@ struct SearchFilters {
 
     bool showDefective = false;  // defective offers are listed (marked defective) instead of hidden
     bool showBlacklisted = false;  // offers on blacklisted machines / hosts are listed (marked blacklisted)
+    bool favoritesOnly = false;    // only offers on favorite machines (asked from vast.ai like machineIds)
+    std::vector<long long> favoriteMachines;  // runtime only, taken from Settings::favoriteMachines
 
     // Disk size the offers are priced for: like the console, at least the template's recommended disk space.
     [[nodiscard]] double effectiveDiskGb() const { return std::max(diskGb, templateDiskGb.value_or(0.0)); }

@@ -244,4 +244,26 @@ TEST_SUITE("QueryBuilder") {
         f.machineIds = "abc";  // nothing valid: no constraint
         CHECK_FALSE(QueryBuilder::buildRestBody(f).contains("machine_id"));
     }
+
+    TEST_CASE("favorites only asks for the favorite machines") {
+        SearchFilters f;
+        f.favoriteMachines = {111, 222};
+        CHECK(QueryBuilder::buildQueryString(f).find("machine_id") == std::string::npos);  // option off
+        f.favoritesOnly = true;
+        CHECK(QueryBuilder::buildQueryString(f).find("machine_id in [111,222]") != std::string::npos);
+        f.machineIds = "222 333";  // both: only the favorites among the listed machines
+        CHECK(QueryBuilder::buildQueryString(f).find("machine_id=222") != std::string::npos);
+        f.machineIds = "333";  // no overlap: the listed machines (the view hides the non-favorites)
+        CHECK(QueryBuilder::buildQueryString(f).find("machine_id=333") != std::string::npos);
+        f.machineIds.clear();
+        f.favoriteMachines.clear();  // no favorites yet: no constraint
+        CHECK(QueryBuilder::buildQueryString(f).find("machine_id") == std::string::npos);
+        // Saved with the filters (presets); the favorite list itself is not.
+        SearchFilters saved;
+        saved.favoritesOnly = true;
+        saved.favoriteMachines = {111};
+        const SearchFilters back = json(saved).get<SearchFilters>();
+        CHECK(back.favoritesOnly);
+        CHECK(back.favoriteMachines.empty());
+    }
 }

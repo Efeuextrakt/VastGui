@@ -39,6 +39,7 @@ void SettingsView::draw(App& app) {
     if (ImGui::CollapsingHeader(ICON_FA_FILTER "  Search defaults & defective machines", ImGuiTreeNodeFlags_DefaultOpen)) {
         drawSearch(app);
     }
+    if (ImGui::CollapsingHeader(ICON_FA_STAR "  Favorites")) drawFavorites(app);
     if (ImGui::CollapsingHeader(ICON_FA_BAN "  Blacklist")) drawBlacklist(app);
     if (ImGui::CollapsingHeader(ICON_FA_CIRCLE_INFO "  About & files")) drawAbout(app);
     ImGui::EndChild();
@@ -328,45 +329,65 @@ void SettingsView::drawSearch(App& app) {
     ImGui::Spacing();
 }
 
+namespace {
+
+// Editable list of IDs (add field, Clear all, one removable button per ID). Returns whether it changed.
+bool editIdList(const char* title, std::set<std::int64_t>& ids, std::int64_t& input, const char* id) {
+    bool changed = false;
+    ImGui::PushID(id);
+    ImGui::SeparatorText(title);
+    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 8);
+    ImGui::InputScalar("##add", ImGuiDataType_S64, &input);
+    ImGui::SameLine();
+    if (ImGui::Button(ICON_FA_PLUS " Add") && input > 0) {
+        ids.insert(input);
+        input = 0;
+        changed = true;
+    }
+    ImGui::SameLine();
+    if (!ids.empty() && ui::SecondaryButton("Clear all")) {
+        ids.clear();
+        changed = true;
+    }
+    std::optional<std::int64_t> remove;
+    int n = 0;
+    for (auto v : ids) {
+        ImGui::PushID(static_cast<int>(v));
+        if (n++ % 6 != 0) ImGui::SameLine();
+        if (ui::SecondaryButton((std::to_string(v) + "  " ICON_FA_XMARK).c_str())) remove = v;
+        ImGui::PopID();
+    }
+    if (remove) {
+        ids.erase(*remove);
+        changed = true;
+    }
+    if (ids.empty()) ui::TextDim("(empty)");
+    ImGui::PopID();
+    return changed;
+}
+
+}  // namespace
+
 void SettingsView::drawBlacklist(App& app) {
     Settings& s = app.settings();
     Blacklist& b = s.blacklist;
-    bool changed = false;
-    auto list = [&](const char* title, std::set<std::int64_t>& ids, std::int64_t& input, const char* id) {
-        ImGui::PushID(id);
-        ImGui::SeparatorText(title);
-        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 8);
-        ImGui::InputScalar("##add", ImGuiDataType_S64, &input);
-        ImGui::SameLine();
-        if (ImGui::Button(ICON_FA_PLUS " Add") && input > 0) {
-            ids.insert(input);
-            input = 0;
-            changed = true;
-        }
-        ImGui::SameLine();
-        if (!ids.empty() && ui::SecondaryButton("Clear all")) {
-            ids.clear();
-            changed = true;
-        }
-        std::optional<std::int64_t> remove;
-        int n = 0;
-        for (auto v : ids) {
-            ImGui::PushID(static_cast<int>(v));
-            if (n++ % 6 != 0) ImGui::SameLine();
-            if (ui::SecondaryButton((std::to_string(v) + "  " ICON_FA_XMARK).c_str())) remove = v;
-            ImGui::PopID();
-        }
-        if (remove) {
-            ids.erase(*remove);
-            changed = true;
-        }
-        if (ids.empty()) ui::TextDim("(empty)");
-        ImGui::PopID();
-    };
     ui::TextDim("Offers on these machines/hosts are hidden in Search (tick Blacklisted Machines there to show them, marked blacklisted). Right-click an offer to add one.");
-    list("Machines", b.machines, addMachine_, "m");
-    list("Hosts", b.hosts, addHost_, "h");
+    bool changed = editIdList("Machines", b.machines, addMachine_, "m");
+    changed |= editIdList("Hosts", b.hosts, addHost_, "h");
     if (changed) {
+        for (const auto id : b.machines) s.favoriteMachines.erase(id);  // never both
+        app.markSettingsDirty();
+        app.searchView().onBlacklistChanged(app);
+    }
+}
+
+void SettingsView::drawFavorites(App& app) {
+    Settings& s = app.settings();
+    ui::TextDim("Offers on these machines are marked with a gold star in Search (tick Favorites Only there to search "
+                "only them). Use the star on the Instances page or right-click an offer to add one. Adding a machine "
+                "here removes it from the blacklist.");
+    if (editIdList("Machines", s.favoriteMachines, addFavorite_, "f")) {
+        for (const auto id : s.favoriteMachines) s.blacklist.machines.erase(id);  // never both
         app.markSettingsDirty();
         app.searchView().onBlacklistChanged(app);
     }

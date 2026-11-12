@@ -95,6 +95,7 @@ private:
     int hiddenDeverified_ = 0;
     int hiddenIncompatible_ = 0;
     int hiddenRented_ = 0;
+    int hiddenNonFavorite_ = 0;
     std::set<std::int64_t> rentedMachines_;  // machines of the user's instances (all states)
     std::size_t receivedOffers_ = 0;  // offers in all responses of the last search, before merging
     int mergedRequests_ = 0;

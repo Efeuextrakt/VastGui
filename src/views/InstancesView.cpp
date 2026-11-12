@@ -42,7 +42,7 @@ constexpr InstColumn kInstColumns[ICCount] = {
     {"Reserve", 115, false},
     {"Uptime", 70, false}, {"SSH", 170, false},    {"Ports", 140, true},
     {"GPU util", 80, false}, {"CPU util", 80, false}, {"VRAM", 90, false}, {"Disk", 90, false},
-    {"$/hr trend", 90, false}, {"Actions", 205, false},
+    {"$/hr trend", 90, false}, {"Actions", 235, false},
 };
 
 const char* kStatusFilters[] = {"All", "running", "starting", "loading", "scheduling", "stopping", "inactive", "outbid",
@@ -214,14 +214,38 @@ void toggleMachineBlacklist(App& app, const Instance& inst) {
         app.toasts().warning("This instance reports no machine ID");
         return;
     }
-    auto& machines = app.settings().blacklist.machines;
+    Settings& s = app.settings();
     const auto id = *inst.machineId;
-    if (machines.erase(id) > 0) {
+    if (s.blacklist.machines.contains(id)) {
+        s.setBlacklistedMachine(id, false);
         app.toasts().info("Machine " + std::to_string(id) + " removed from the blacklist");
     } else {
-        machines.insert(id);
+        const bool wasFavorite = s.favoriteMachines.contains(id);
+        s.setBlacklistedMachine(id, true);
         app.toasts().info("Machine " + std::to_string(id) + " blacklisted",
-                          "Its offers are hidden in Search (or marked blacklisted). Manage the list in Settings.");
+                          std::string(wasFavorite ? "Removed from your favorites. " : "") +
+                              "Its offers are hidden in Search (or marked blacklisted). Manage the list in Settings.");
+    }
+    app.markSettingsDirty();
+    app.searchView().onBlacklistChanged(app);
+}
+
+void toggleMachineFavorite(App& app, const Instance& inst) {
+    if (!inst.machineId) {
+        app.toasts().warning("This instance reports no machine ID");
+        return;
+    }
+    Settings& s = app.settings();
+    const auto id = *inst.machineId;
+    if (s.favoriteMachines.contains(id)) {
+        s.setFavoriteMachine(id, false);
+        app.toasts().info("Machine " + std::to_string(id) + " removed from favorites");
+    } else {
+        const bool wasBlacklisted = s.blacklist.machines.contains(id);
+        s.setFavoriteMachine(id, true);
+        app.toasts().info("Machine " + std::to_string(id) + " added to favorites",
+                          std::string(wasBlacklisted ? "Removed from the blacklist. " : "") +
+                              "Its offers are marked with a star in Search. Manage the list in Settings.");
     }
     app.markSettingsDirty();
     app.searchView().onBlacklistChanged(app);
@@ -586,6 +610,10 @@ void InstancesView::drawRowMenu(App& app, const Instance& inst) {
     }
     if (ImGui::MenuItem(ICON_FA_CODE "  View raw JSON")) openDialog(Dialog::Json, inst);
     ImGui::Separator();
+    const bool fav = inst.machineId && app.settings().favoriteMachines.contains(*inst.machineId);
+    const std::string favLabel = fav ? std::format(ICON_FA_STAR "  Remove machine {} from favorites", *inst.machineId)
+                                     : std::format(ICON_FA_STAR "  Add machine {} to favorites", inst.machineId.value_or(0));
+    if (ImGui::MenuItem(favLabel.c_str(), nullptr, false, inst.machineId.has_value())) toggleMachineFavorite(app, inst);
     const bool listed = inst.machineId && app.settings().blacklist.machines.contains(*inst.machineId);
     const std::string blLabel = listed ? std::format(ICON_FA_BAN "  Remove machine {} from blacklist", *inst.machineId)
                                        : std::format(ICON_FA_BAN "  Blacklist machine {}", inst.machineId.value_or(0));
@@ -679,6 +707,17 @@ void InstancesView::drawActions(App& app, const Instance& i) {
         const auto jup = i.jupyterUrl();
         ImGui::BeginDisabled(!jup.has_value());
         if (ui::IconButton(ICON_FA_ARROW_UP_RIGHT_FROM_SQUARE, "Open Jupyter") && jup) platform::openUrl(*jup);
+        ImGui::EndDisabled();
+    }
+    ImGui::SameLine(0, 2);
+    {
+        const bool fav = i.machineId && app.settings().favoriteMachines.contains(*i.machineId);
+        const ImVec4 gold = ui::palette().caution;
+        const std::string tip = !i.machineId ? std::string("No machine ID")
+                                : fav ? std::format("Machine {} is a favorite - click to remove", *i.machineId)
+                                      : std::format("Add machine {} to favorites (marked with a star in Search)", *i.machineId);
+        ImGui::BeginDisabled(!i.machineId.has_value());
+        if (ui::IconButton(ICON_FA_STAR, tip.c_str(), fav ? &gold : nullptr)) toggleMachineFavorite(app, i);
         ImGui::EndDisabled();
     }
     ImGui::SameLine(0, 2);
@@ -906,8 +945,8 @@ void InstancesView::drawTable(App& app) {
                                   ImGuiTableFlags_Sortable | ImGuiTableFlags_RowBg | ImGuiTableFlags_PadOuterX | ImGuiTableFlags_BordersInnerV |
                                   ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit;
     // New table id whenever saved widths/order must not apply: imgui.ini stores them per column index (V4: wider
-    // Status column for the console status labels such as "scheduling").
-    if (!ImGui::BeginTable("##instancesV4", ICCount, flags)) return;
+    // Status column for the console status labels such as "scheduling"; V5: wider Actions column for the star).
+    if (!ImGui::BeginTable("##instancesV5", ICCount, flags)) return;
     ImGui::TableSetupScrollFreeze(2, 1);
     for (int c = 0; c < ICCount; ++c) {
         ImGuiTableColumnFlags cf = ImGuiTableColumnFlags_WidthFixed;

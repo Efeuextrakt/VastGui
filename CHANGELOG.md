@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Instances
+- Star button next to the blacklist (Ban) button, and *Add machine ... to favorites* in the row menu: marks the
+  machine as a favorite (gold while active). The *Actions* column is wider for it; the instance table's column
+  widths and order are reset once.
+
+### Search
+- Favorite machines are marked: gold star and gold border on cards, gold ID with a star in the table.
+- *Favorites Only* in *Machine Options* (saved with filters and presets): searches only your favorite machines,
+  asked from vast.ai directly (like the Machine IDs field), so they are found outside the random sample. The
+  results line shows "favorites only (N machines)".
+- Right-click an offer > *Add machine to favorites* / *Remove machine from favorites*.
+
+### Settings
+- New *Favorites* section to view, add and remove favorite machines (like the Blacklist).
+- A machine is never favorite and blacklisted at once: adding it to one list removes it from the other.
+
 ## 1.4.3 - 2026-11-12
 
 ### Search

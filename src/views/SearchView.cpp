@@ -282,10 +282,15 @@ void SearchView::recompute(App& app) {
     hiddenDeverified_ = 0;
     hiddenIncompatible_ = 0;
     hiddenRented_ = 0;
+    hiddenNonFavorite_ = 0;
     tableRowsDirty_ = true;
     for (std::size_t idx : order) {
         if (!passesVerificationFilter(offers_[idx], f)) {
             ++hiddenDeverified_;
+            continue;
+        }
+        if (f.favoritesOnly && !(offers_[idx].machineId && s.favoriteMachines.contains(*offers_[idx].machineId))) {
+            ++hiddenNonFavorite_;
             continue;
         }
         if (!f.showRentedByMe && offers_[idx].machineId && rentedMachines_.contains(*offers_[idx].machineId)) {
@@ -340,10 +345,30 @@ void SearchView::handleAction(App& app, ui::OfferAction a, const Offer& o) {
             break;
         case ui::OfferAction::HideMachine:
             if (o.machineId) {
-                s.blacklist.machines.insert(*o.machineId);
+                const bool wasFavorite = s.favoriteMachines.contains(*o.machineId);
+                s.setBlacklistedMachine(*o.machineId, true);
                 app.markSettingsDirty();
                 recompute(app);
-                app.toasts().info("Machine " + std::to_string(*o.machineId) + " hidden", "Manage the blacklist in Settings.");
+                app.toasts().info("Machine " + std::to_string(*o.machineId) + " hidden",
+                                  wasFavorite ? "Removed from your favorites. Manage the blacklist in Settings."
+                                              : "Manage the blacklist in Settings.");
+            }
+            break;
+        case ui::OfferAction::ToggleFavorite:
+            if (o.machineId) {
+                const bool add = !s.favoriteMachines.contains(*o.machineId);
+                const bool wasBlacklisted = s.blacklist.machines.contains(*o.machineId);
+                s.setFavoriteMachine(*o.machineId, add);
+                app.markSettingsDirty();
+                recompute(app);
+                const std::string m = "Machine " + std::to_string(*o.machineId);
+                if (add) {
+                    app.toasts().info(m + " added to favorites",
+                                      wasBlacklisted ? "Removed from the blacklist. Manage favorites in Settings."
+                                                     : "Manage favorites in Settings.");
+                } else {
+                    app.toasts().info(m + " removed from favorites");
+                }
             }
             break;
         case ui::OfferAction::ViewJson:
@@ -494,6 +519,18 @@ void SearchView::draw(App& app) {
     if (!gpuTypesRequested_) requestGpuTypes(app);
     // The limit is a setting (not part of saved filters/presets); keep the filters in sync so searches use it.
     app.settings().filters.limit = app.settings().searchLimit;
+    // Favorites are a setting too; the filters carry a copy for the query. With "Favorites only" a changed list
+    // needs a new search, otherwise only the marks / client-side filter change.
+    {
+        SearchFilters& f = app.settings().filters;
+        const auto& fav = app.settings().favoriteMachines;
+        std::vector<long long> ids(fav.begin(), fav.end());
+        if (ids != f.favoriteMachines) {
+            f.favoriteMachines = std::move(ids);
+            if (f.favoritesOnly) changedAt_ = ImGui::GetTime();
+            if (!offers_.empty()) recompute(app);
+        }
+    }
     // Re-filter when the set of machines with own instances changes (instances refresh in the background).
     {
         std::set<std::int64_t> rented;
@@ -915,6 +952,14 @@ void SearchView::drawFilterPanel(App& app) {
     }
 
     ImGui::SeparatorText("Machine Options");
+    {
+        const std::string favLabel = std::format(ICON_FA_STAR " Favorites Only ({})###favonly", st.favoriteMachines.size());
+        if (ImGui::Checkbox(favLabel.c_str(), &f.favoritesOnly)) filtersChanged(app, true);
+        ui::HelpMarker("Search only your favorite machines (they are asked from vast.ai directly, so they are found "
+                       "even outside the random sample). The other filters still apply.\n\nAdd favorites with the star "
+                       "button on the Instances page or an offer's right-click menu; manage the list in Settings > "
+                       "Favorites. Favorite offers are marked with a gold star.");
+    }
     if (ImGui::Checkbox("Unverified Machines", &f.showUnverified)) filtersChanged(app, true);
     ImGui::Indent();
     ImGui::BeginDisabled(!f.showUnverified);
@@ -1066,6 +1111,19 @@ void SearchView::drawResults(App& app) {
     }
     {
         const SearchFilters& sf = app.settings().filters;
+        if (sf.favoritesOnly) {
+            const std::size_t n = app.settings().favoriteMachines.size();
+            ImGui::SameLine();
+            ui::TextWithColor(p.caution, n == 0 ? ICON_FA_STAR " favorites only - no favorites yet"
+                                                : std::format(ICON_FA_STAR " favorites only ({} machine{})", n, n == 1 ? "" : "s").c_str());
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Only offers on your favorite machines are searched and shown.\n"
+                                  "Untick 'Favorites Only' in Machine Options to search all machines.%s",
+                                  n == 0 ? "\n\nAdd favorites with the star button on the Instances page or an offer's "
+                                           "right-click menu."
+                                         : "");
+            }
+        }
         const std::size_t ids = QueryBuilder::parseIdList(sf.machineIds).ids.size() + QueryBuilder::parseIdList(sf.hostIds).ids.size();
         if (ids > 0) {
             ImGui::SameLine();
@@ -1121,6 +1179,7 @@ void SearchView::drawCards(App& app) {
             ctx.rentedByMe = (offers_[idx].machineId && rentedMachines_.contains(*offers_[idx].machineId)) ||
                              rentedOffers_.contains(offers_[idx].id);
             ctx.renting = rentingOffers_.contains(offers_[idx].id);
+            ctx.favorite = offers_[idx].machineId && st.favoriteMachines.contains(*offers_[idx].machineId);
             ctx.incompatible = isIncompatible(offers_[idx], st.filters);
             if (ctx.incompatible) ctx.incompatibleWhy = incompatibleReason(offers_[idx], st.filters);
             const auto a = ui::OfferCard(offers_[idx], metrics_[idx], defects_[idx], ctx);
@@ -1228,15 +1287,21 @@ void SearchView::drawTable(App& app) {
             const bool defective = defects_[idx].defective();
             const bool incompatible = isIncompatible(o, st.filters);
             const bool rentedByMe = (o.machineId && rentedMachines_.contains(*o.machineId)) || rentedOffers_.contains(o.id);
+            const bool favorite = o.machineId && st.favoriteMachines.contains(*o.machineId);
             ImGui::TableNextRow();
             ImGui::PushID(static_cast<int>(idx));
             if (rentedByMe) ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ui::col(ui::palette().info, 0.10f));
             for (int c = 0; c < ColCount; ++c) {
                 if (!ImGui::TableSetColumnIndex(c)) continue;
                 if (c == ColId) {
-                    ui::TableRowSelectable(textCell(c, o, m, st.currency).c_str(), false);
+                    // Favorite machines: gold ID with a star.
+                    if (favorite) ImGui::PushStyleColor(ImGuiCol_Text, ui::palette().caution);
+                    ui::TableRowSelectable(favorite ? (ICON_FA_STAR " " + textCell(c, o, m, st.currency)).c_str()
+                                                    : textCell(c, o, m, st.currency).c_str(),
+                                           false);
+                    if (favorite) ImGui::PopStyleColor();
                     if (ImGui::BeginPopupContextItem("##rowctx")) {
-                        if (auto a = ui::OfferContextMenuItems(o, !rentedByMe); a != ui::OfferAction::None) pending = std::pair{a, idx};
+                        if (auto a = ui::OfferContextMenuItems(o, !rentedByMe, favorite); a != ui::OfferAction::None) pending = std::pair{a, idx};
                         ImGui::EndPopup();
                     }
                 } else if (c == ColRent) {

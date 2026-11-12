@@ -69,6 +69,7 @@ void to_json(json& j, const Settings& s) {
     for (const auto& [name, f] : s.presets) presets[name] = f;
     j["presets"] = presets;
     j["blacklist"] = s.blacklist;
+    j["favorite_machines"] = s.favoriteMachines;
     j["template"] = s.currentTemplate;
     j["card_view"] = s.cardView;
     j["template_card_view"] = s.templateCardView;
@@ -85,6 +86,24 @@ void to_json(json& j, const Settings& s) {
 }
 
 void from_json(const json& j, Settings& s) { readSettings(j, s, nullptr); }
+
+void Settings::setFavoriteMachine(std::int64_t id, bool on) {
+    if (on) {
+        favoriteMachines.insert(id);
+        blacklist.machines.erase(id);
+    } else {
+        favoriteMachines.erase(id);
+    }
+}
+
+void Settings::setBlacklistedMachine(std::int64_t id, bool on) {
+    if (on) {
+        blacklist.machines.insert(id);
+        favoriteMachines.erase(id);
+    } else {
+        blacklist.machines.erase(id);
+    }
+}
 
 void readSettings(const json& j, Settings& s, std::vector<std::string>* problems) {
     using namespace jsonutil;
@@ -157,6 +176,17 @@ void readSettings(const json& j, Settings& s, std::vector<std::string>* problems
         }
     });
     section("blacklist", [&](const json& v) { s.blacklist = v.get<Blacklist>(); });
+    if (const json* fav = find(j, "favorite_machines"); fav && fav->is_array()) {
+        for (const auto& id : *fav) {
+            if (id.is_number_integer() && id.get<std::int64_t>() > 0) {
+                s.favoriteMachines.insert(id.get<std::int64_t>());
+            } else {
+                problem("favorite_machines contains an invalid machine ID");
+            }
+        }
+    }
+    // Hand-edited files may list a machine twice; the blacklist wins.
+    for (const auto id : s.blacklist.machines) s.favoriteMachines.erase(id);
     section("template", [&](const json& v) {
         Template t = v.get<Template>();
         if (t.image.empty()) {

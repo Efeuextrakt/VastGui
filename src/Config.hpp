@@ -8,8 +8,10 @@
 #include "model/Template.hpp"
 
 #include <array>
+#include <cstdint>
 #include <filesystem>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -64,6 +66,7 @@ struct Settings {
     SearchFilters filters;
     std::map<std::string, SearchFilters> presets;
     Blacklist blacklist;
+    std::set<std::int64_t> favoriteMachines;  // marked in Search; never also on the blacklist (see the setters)
     Template currentTemplate = Template::defaultTemplate();
     bool cardView = true;
     bool templateCardView = true;
@@ -80,6 +83,10 @@ struct Settings {
     bool showActivityLog = true;
     // GPU model names from vast.ai's /gpu_types/ (cached for offline starts; refreshed once per start).
     std::vector<std::string> gpuModels;
+
+    // A machine is a favorite or blacklisted, never both: adding it to one list removes it from the other.
+    void setFavoriteMachine(std::int64_t id, bool on);
+    void setBlacklistedMachine(std::int64_t id, bool on);
 };
 
 void to_json(json& j, const Settings& s);

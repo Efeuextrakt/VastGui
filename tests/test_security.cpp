@@ -116,6 +116,31 @@ TEST_SUITE("Security") {
         CHECK(platform::readTextFile(paths.settingsFile)->find(lost.apiKeySealed) != std::string::npos);
     }
 
+    TEST_CASE("settings: favorite machines are saved and never also blacklisted") {
+        Settings s;
+        s.setBlacklistedMachine(5, true);
+        s.setFavoriteMachine(5, true);  // favoriting removes it from the blacklist
+        s.setFavoriteMachine(7, true);
+        CHECK(s.favoriteMachines == std::set<std::int64_t>{5, 7});
+        CHECK_FALSE(s.blacklist.machines.contains(5));
+        s.setBlacklistedMachine(7, true);  // and blacklisting removes it from the favorites
+        CHECK(s.favoriteMachines == std::set<std::int64_t>{5});
+        CHECK(s.blacklist.machines.contains(7));
+
+        Settings back;
+        std::vector<std::string> problems;
+        readSettings(json(s), back, &problems);
+        CHECK(problems.empty());
+        CHECK(back.favoriteMachines == s.favoriteMachines);
+
+        // A hand-edited file listing a machine in both: the blacklist wins; invalid IDs are reported.
+        const json both = {{"favorite_machines", {7, 8, "x"}}, {"blacklist", {{"machines", {7}}, {"hosts", json::array()}}}};
+        readSettings(both, back, &problems);
+        CHECK(back.favoriteMachines == std::set<std::int64_t>{8});
+        CHECK(back.blacklist.machines.contains(7));
+        CHECK(problems.size() == 1);
+    }
+
     TEST_CASE("settings: missing, outdated or invalid values fall back to the defaults one by one") {
         TempDir dir;
         ConfigPaths paths;

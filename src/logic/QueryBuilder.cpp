@@ -179,18 +179,31 @@ std::string QueryBuilder::buildQueryString(const SearchFilters& f) {
     if (f.secureCloudOnly) add("datacenter=true");
 
     // Specific machines / hosts (asked from vast.ai, so they are found even outside the random sample).
-    auto idFilter = [&](const char* field, const std::string& text) {
-        const IdList l = parseIdList(text);
-        if (l.ids.size() == 1) {
-            add(std::format("{}={}", field, l.ids.front()));
-        } else if (l.ids.size() > 1) {
+    auto idFilter = [&](const char* field, const std::vector<long long>& ids) {
+        if (ids.size() == 1) {
+            add(std::format("{}={}", field, ids.front()));
+        } else if (ids.size() > 1) {
             std::string list;
-            for (const long long id : l.ids) list += (list.empty() ? "" : ",") + std::to_string(id);
+            for (const long long id : ids) list += (list.empty() ? "" : ",") + std::to_string(id);
             add(std::format("{} in [{}]", field, list));
         }
     };
-    idFilter("machine_id", f.machineIds);
-    idFilter("host_id", f.hostIds);
+    std::vector<long long> machines = parseIdList(f.machineIds).ids;
+    // Favorites only: ask for the favorite machines (those also listed under Machine IDs, if any match). Offers
+    // outside the favorites are removed by the caller, so an empty or non-matching list needs no constraint here.
+    if (f.favoritesOnly && !f.favoriteMachines.empty()) {
+        if (machines.empty()) {
+            machines = f.favoriteMachines;
+        } else {
+            std::vector<long long> both;
+            for (const long long id : machines) {
+                if (std::find(f.favoriteMachines.begin(), f.favoriteMachines.end(), id) != f.favoriteMachines.end()) both.push_back(id);
+            }
+            if (!both.empty()) machines = std::move(both);
+        }
+    }
+    idFilter("machine_id", machines);
+    idFilter("host_id", parseIdList(f.hostIds).ids);
 
     double diskMin = f.effectiveDiskGb();
     if (const auto& r = f.range(RangeField::DiskSpace); r.min) diskMin = std::max(diskMin, *r.min);
