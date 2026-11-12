@@ -236,8 +236,9 @@ OfferAction OfferCard(const Offer& o, const OfferMetrics& m, const DefectInfo& d
             ImGui::Button(ICON_FA_USER_CHECK "  RENTED", ImVec2(-FLT_MIN, 0));
             ImGui::EndDisabled();
             ImGui::PopStyleColor(2);
-            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                ImGui::SetTooltip("Rented by you: you already have an instance on this machine.");
+        } else if (ctx.rentNow) {
+            if (BusyButton(ICON_FA_ROCKET, "RENT", ctx.renting, true, ImVec2(-FLT_MIN, 0)) && !ctx.renting) {
+                action = OfferAction::RentNow;
             }
         } else if (ImGui::Button(ICON_FA_ROCKET "  RENT", ImVec2(-FLT_MIN, 0))) {
             action = OfferAction::Rent;

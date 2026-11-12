@@ -69,7 +69,12 @@ private:
     void updateTemplateRequirements(App& app);
     void filtersChanged(App& app, bool immediate = false);
     void handleAction(App& app, ui::OfferAction a, const Offer& o);
+    [[nodiscard]] RentState newRentState(App& app, const Offer& o);
     void openRent(App& app, const Offer& o);
+    [[nodiscard]] static ApiCall buildRentCall(const RentState& r, bool interruptible);
+    void rentNow(App& app, const Offer& o);
+    std::set<std::int64_t> rentingOffers_;  // offer ids with a one-click rental in flight
+    std::set<std::int64_t> rentedOffers_;   // offer ids rented with one click (shown as RENTED until the next search)
 
     void drawTopBar(App& app);
     void drawFilterPanel(App& app);
@@ -124,7 +129,7 @@ private:
 
     void loadTemplateTab(App& app, int tab, bool force);
     void prepareTemplatePicker(App& app);
-    void applyTemplateToRent(App& app, const Template& t);
+    void applyTemplateToRent(App& app, RentState& r, const Template& t);
     bool pickerForRent_ = false;  // template picker opened from the Rent dialog (applies to that rental only)
 
     std::array<Resource, 3> tplRes_;               // 0 recommended, 1 mine, 2 search

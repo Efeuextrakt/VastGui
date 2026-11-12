@@ -29,6 +29,10 @@ bool SmallCheckbox(const char* label, bool* v);
 // is kept per window under strId; forceOpen shows it open without changing that state. Returns whether it is open
 // (the caller indents its rows itself).
 bool GroupHeader(const char* strId, const char* label, bool forceOpen = false);
+enum class CheckState { Off, Mixed, On };
+// GroupHeader with a tri-state check box (same look as SmallCheckbox) between the arrow and the label. A click on
+// the box sets *checkClicked instead of opening/closing the group.
+bool GroupHeaderCheck(const char* strId, const char* label, CheckState state, bool* checkClicked, bool forceOpen = false);
 // Row selector for tables: call in the row's first cell instead of Selectable(SpanAllColumns). The hover / selected
 // highlight covers the whole row (full height, rounded corners, drawn behind the cells), and a click anywhere on
 // the row counts. IsItemHovered() / BeginPopupContextItem() afterwards refer to the row.

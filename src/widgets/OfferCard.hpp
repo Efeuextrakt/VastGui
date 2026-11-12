@@ -7,12 +7,14 @@
 
 namespace vast::ui {
 
-enum class OfferAction { None, Rent, CopyOfferId, CopyMachineId, CopyHostId, HideHost, HideMachine, ViewJson };
+enum class OfferAction { None, Rent, RentNow, CopyOfferId, CopyMachineId, CopyHostId, HideHost, HideMachine, ViewJson };
 
 struct OfferCardContext {
     const CurrencyFormat* currency = nullptr;
     bool incompatible = false;    // template needs a newer CUDA than this machine supports
     bool rentedByMe = false;      // the user already has an instance on this machine
+    bool rentNow = false;         // RENT rents at once (on-demand); otherwise it opens the Rent dialog
+    bool renting = false;         // a one-click rental of this offer is in flight
     std::string incompatibleWhy;
     bool interruptible = false;   // price is the suggested bid
     std::optional<double> diskGb;  // disk size the price includes (for the price tooltip)

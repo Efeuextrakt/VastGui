@@ -384,7 +384,8 @@ void InstancesView::openDialog(Dialog d, const Instance& inst) {
     }
 }
 
-void InstancesView::openLogs(App& app, std::int64_t id) {
+void InstancesView::openLogs(App& app, const Instance& inst) {
+    const std::int64_t id = inst.id;
     for (auto& w : logWindows_) {
         if (w->id == id) {
             w->open = true;
@@ -394,13 +395,26 @@ void InstancesView::openLogs(App& app, std::int64_t id) {
     }
     auto w = std::make_unique<LogWindow>();
     w->id = id;
-    fetchLogs(app, *w, 0);
+    // The tab picked by hand last time wins; otherwise only a running instance starts on its container logs (while
+    // it is created / loading / stopped the daemon logs tell what is going on).
+    if (const auto it = logTabChoice_.find(id); it != logTabChoice_.end()) {
+        w->active = it->second;
+    } else {
+        w->active = inst.consoleStatus(fmt::nowEpoch(), app.user()).label == "running" ? 0 : 1;
+    }
+    fetchLogs(app, *w, w->active);
     logWindows_.push_back(std::move(w));
 }
 
 void InstancesView::fetchLogs(App& app, LogWindow& w, int tab) {
     if (tab < 0 || tab >= static_cast<int>(std::size(w.tabs))) return;
     LogTab& t = w.tabs[tab];
+    if (t.res.loading) return;
+    if (w.busy()) {
+        w.queued[tab] = true;
+        return;
+    }
+    w.queued[tab] = false;
     t.tail = std::clamp(t.tail, 100, 20000);
     ApiCall c = cmd::instanceLogs(w.id, t.tail, t.filter, tab == 1);
     c.quiet = t.res.loaded;  // background refreshes don't flood the console
@@ -536,7 +550,7 @@ void InstancesView::drawRowMenu(App& app, const Instance& inst) {
     if (ImGui::MenuItem(ICON_FA_ARROWS_ROTATE "  Update from template...")) openDialog(Dialog::Update, inst);
     ImGui::Separator();
     if (ImGui::MenuItem(ICON_FA_TAG "  Label...")) openDialog(Dialog::Label, inst);
-    if (ImGui::MenuItem(ICON_FA_FILE_LINES "  Show logs")) openLogs(app, inst.id);
+    if (ImGui::MenuItem(ICON_FA_FILE_LINES "  Show logs")) openLogs(app, inst);
     if (ImGui::MenuItem(ICON_FA_TERMINAL "  Execute command...")) openDialog(Dialog::Execute, inst);
     ImGui::Separator();
     const std::string ssh = inst.sshCommand();
@@ -650,7 +664,7 @@ void InstancesView::drawActions(App& app, const Instance& i) {
         app.run(cmd::startInstances({i.id}), [&app](const ApiResult&) { app.refreshInstances(); }, "Start requested");
     }
     ImGui::SameLine(0, 2);
-    if (ui::IconButton(ICON_FA_FILE_LINES, "Logs")) openLogs(app, i.id);
+    if (ui::IconButton(ICON_FA_FILE_LINES, "Logs")) openLogs(app, i);
     ImGui::SameLine(0, 2);
     if (ui::IconButton(ICON_FA_TERMINAL, "Copy SSH command")) {
         const std::string ssh = i.sshCommand();
@@ -1419,6 +1433,14 @@ void InstancesView::drawFloating(App& app) {
     for (auto& wp : logWindows_) {
         LogWindow& w = *wp;
         if (!w.open) continue;
+        if (!w.busy()) {
+            const int other = 1 - w.active;
+            if (w.queued[w.active]) {
+                fetchLogs(app, w, w.active);
+            } else if (w.queued[other]) {
+                fetchLogs(app, w, other);
+            }
+        }
         const std::string title = std::format("Logs: instance {}###logs{}", w.id, w.id);
         const float em = ImGui::GetFontSize();
         ImGui::SetNextWindowSize(ImVec2(em * 62.0f, em * 36.0f), ImGuiCond_FirstUseEver);
@@ -1426,11 +1448,17 @@ void InstancesView::drawFloating(App& app) {
         if (!ImGui::IsWindowDocked() && ui::ClickedOutsideCurrentWindow()) w.open = false;
         if (logsVisible) {
             if (ImGui::BeginTabBar("##logtabs")) {
+                // The tab bar keeps its own selection (also from an earlier window of this instance), so a new
+                // window first selects its initial tab and ignores which tab ImGui reports open on that frame.
+                const bool forcing = w.selectActive;
+                w.selectActive = false;
                 for (int t = 0; t < 2; ++t) {
-                    if (ImGui::BeginTabItem(kTabNames[t])) {
-                        if (w.active != t) {
+                    const ImGuiTabItemFlags flags = forcing && t == w.active ? ImGuiTabItemFlags_SetSelected : 0;
+                    if (ImGui::BeginTabItem(kTabNames[t], nullptr, flags)) {
+                        if (!forcing && w.active != t) {
                             w.active = t;
-                            if (!w.tabs[t].res.loaded && !w.tabs[t].res.loading) fetchLogs(app, w, t);
+                            logTabChoice_[w.id] = t;
+                            if (!w.tabs[t].res.loaded) fetchLogs(app, w, t);
                         }
                         ImGui::EndTabItem();
                     }
@@ -1438,12 +1466,13 @@ void InstancesView::drawFloating(App& app) {
                 ImGui::EndTabBar();
             }
             LogTab& tab = w.tabs[w.active];
+            const bool requesting = tab.res.loading || w.queued[w.active];
             const std::string text = tab.res.data.is_string() ? tab.res.data.get<std::string>()
                                      : tab.res.data.is_null() ? std::string{}
                                                               : tab.res.data.dump(2);
 
             // Toolbar: identical widgets on both tabs so switching never shifts the layout.
-            if (ui::BusyButton(ICON_FA_ARROWS_ROTATE, "Refresh", tab.res.loading)) fetchLogs(app, w, w.active);
+            if (ui::BusyButton(ICON_FA_ARROWS_ROTATE, "Refresh", requesting)) fetchLogs(app, w, w.active);
             ImGui::SameLine();
             ImGui::Checkbox("Auto", &w.autoRefresh);
             ImGui::SameLine();
@@ -1495,8 +1524,8 @@ void InstancesView::drawFloating(App& app) {
             ImGui::EndDisabled();
             ui::InlineError(tab.res.error, 60);
 
-            ui::LogText("##logtext", text.empty() && tab.res.loading ? "requesting logs..." : text, ImVec2(0, 0), true);
-            if (w.autoRefresh && !tab.res.loading && now - tab.res.attemptedAt > w.intervalSec) fetchLogs(app, w, w.active);
+            ui::LogText("##logtext", text.empty() && requesting ? "requesting logs..." : text, ImVec2(0, 0), true);
+            if (w.autoRefresh && !requesting && now - tab.res.attemptedAt > w.intervalSec) fetchLogs(app, w, w.active);
         }
         ImGui::End();
     }

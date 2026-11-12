@@ -5,7 +5,7 @@
 #   cmake --build build/cmake
 #   ctest --test-dir build/cmake
 cmake_minimum_required(VERSION 3.20)
-project(VastGui VERSION 1.4.2 LANGUAGES CXX)
+project(VastGui VERSION 1.4.3 LANGUAGES CXX)
 if(WIN32)
     enable_language(RC)
 endif()

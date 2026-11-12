@@ -161,49 +161,57 @@ ListRow listRow(const char* strId, float contentWidth) {
     return r;
 }
 
-}  // namespace
+float smallBoxSize() { return std::floor(ImGui::GetFontSize() * 0.77f); }
 
-bool SmallCheckbox(const char* label, bool* v) {
+// Draws the small check box with its left edge at x on the text line starting at rowY.
+void drawSmallBox(float x, float rowY, CheckState state, bool hovered) {
     const Palette& p = palette();
-    const ImGuiStyle& style = ImGui::GetStyle();
-    const float box = std::floor(ImGui::GetFontSize() * 0.77f);
-    const char* end = ImGui::FindRenderedTextEnd(label);
-    const float gap = style.ItemInnerSpacing.x;
-    const ListRow row = listRow(label, box + gap + ImGui::CalcTextSize(label, end).x);
-    if (!row.visible) return false;
-    if (row.clicked) *v = !*v;
     ImDrawList* dl = ImGui::GetWindowDrawList();
+    const float box = smallBoxSize();
     // Centre the box on the capital letters (cap height ~ 0.7 em) rather than on the full line height, which
     // includes room for descenders the GPU names do not use.
-    const float capCentre = row.pos.y + ImGui::GetFontBaked()->Ascent - ImGui::GetFontSize() * 0.35f;
-    const ImVec2 a(row.pos.x, std::round(capCentre - box * 0.5f));
+    const float capCentre = rowY + ImGui::GetFontBaked()->Ascent - ImGui::GetFontSize() * 0.35f;
+    const ImVec2 a(x, std::round(capCentre - box * 0.5f));
     const ImVec2 b(a.x + box, a.y + box);
     const float rounding = std::max(1.0f, box * 0.2f);
-    if (*v) {
+    const float t = std::max(1.0f, box * 0.14f);
+    if (state == CheckState::On) {
         dl->AddRectFilled(a, b, col(p.accent), rounding);
-        const float t = std::max(1.0f, box * 0.14f);
         const ImVec2 c1(a.x + box * 0.22f, a.y + box * 0.52f), c2(a.x + box * 0.42f, a.y + box * 0.72f),
             c3(a.x + box * 0.78f, a.y + box * 0.28f);
         dl->AddLine(c1, c2, IM_COL32_WHITE, t);
         dl->AddLine(c2, c3, IM_COL32_WHITE, t);
+    } else if (state == CheckState::Mixed) {
+        dl->AddRectFilled(a, b, col(p.accent), rounding);
+        const float y = a.y + box * 0.5f;
+        dl->AddLine(ImVec2(a.x + box * 0.25f, y), ImVec2(a.x + box * 0.75f, y), IM_COL32_WHITE, t);
     } else {
         dl->AddRectFilled(a, b, col(p.frame), rounding);
-        dl->AddRect(a, b, col(row.hovered ? p.accent : p.border), rounding);
+        dl->AddRect(a, b, col(hovered ? p.accent : p.border), rounding);
     }
-    dl->AddText(ImVec2(b.x + gap, row.pos.y), col(p.text), label, end);
-    return row.clicked;
 }
 
-bool GroupHeader(const char* strId, const char* label, bool forceOpen) {
+bool groupHeaderImpl(const char* strId, const char* label, bool forceOpen, const CheckState* check, bool* checkClicked) {
     const ImGuiStyle& style = ImGui::GetStyle();
     ImGuiStorage* storage = ImGui::GetStateStorage();
     const ImGuiID key = ImGui::GetID(strId);
     bool open = storage->GetBool(key, false);
     // Arrow and text placed like an unframed tree node, so the look matches the rest of the UI.
-    const float textX = ImGui::GetFontSize() + style.FramePadding.x * 2.0f;
+    const float arrowW = ImGui::GetFontSize() + style.FramePadding.x * 2.0f;
+    const float gap = style.ItemInnerSpacing.x;
+    const float checkW = check ? smallBoxSize() + gap : 0.0f;
     const char* end = ImGui::FindRenderedTextEnd(label);
-    const ListRow row = listRow(strId, textX + ImGui::CalcTextSize(label, end).x);
-    if (row.clicked && !forceOpen) {
+    const ListRow row = listRow(strId, arrowW + checkW + ImGui::CalcTextSize(label, end).x);
+    // The check box (with half a gap around it) toggles the selection; the rest of the row opens/closes the group.
+    bool overBox = false;
+    if (check) {
+        const float mx = ImGui::GetIO().MousePos.x;
+        const float boxL = row.pos.x + arrowW;
+        overBox = mx >= boxL - gap * 0.5f && mx < boxL + checkW - gap * 0.5f;
+    }
+    if (row.clicked && overBox) {
+        *checkClicked = true;
+    } else if (row.clicked && !forceOpen) {
         open = !open;
         storage->SetBool(key, open);
     }
@@ -213,9 +221,35 @@ bool GroupHeader(const char* strId, const char* label, bool forceOpen) {
         const float f = ImGui::GetFontSize();
         ImGui::RenderArrow(dl, ImVec2(row.pos.x + style.FramePadding.x + f * 0.15f, row.pos.y + f * 0.15f),
                            ImGui::GetColorU32(ImGuiCol_Text), shown ? ImGuiDir_Down : ImGuiDir_Right, 0.70f);
-        dl->AddText(ImVec2(row.pos.x + textX, row.pos.y), ImGui::GetColorU32(ImGuiCol_Text), label, end);
+        if (check) drawSmallBox(row.pos.x + arrowW, row.pos.y, *check, row.hovered && overBox);
+        dl->AddText(ImVec2(row.pos.x + arrowW + checkW, row.pos.y), ImGui::GetColorU32(ImGuiCol_Text), label, end);
     }
     return shown;
+}
+
+}  // namespace
+
+bool SmallCheckbox(const char* label, bool* v) {
+    const Palette& p = palette();
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const float box = smallBoxSize();
+    const char* end = ImGui::FindRenderedTextEnd(label);
+    const float gap = style.ItemInnerSpacing.x;
+    const ListRow row = listRow(label, box + gap + ImGui::CalcTextSize(label, end).x);
+    if (!row.visible) return false;
+    if (row.clicked) *v = !*v;
+    drawSmallBox(row.pos.x, row.pos.y, *v ? CheckState::On : CheckState::Off, row.hovered);
+    ImGui::GetWindowDrawList()->AddText(ImVec2(row.pos.x + box + gap, row.pos.y), col(p.text), label, end);
+    return row.clicked;
+}
+
+bool GroupHeader(const char* strId, const char* label, bool forceOpen) {
+    return groupHeaderImpl(strId, label, forceOpen, nullptr, nullptr);
+}
+
+bool GroupHeaderCheck(const char* strId, const char* label, CheckState state, bool* checkClicked, bool forceOpen) {
+    *checkClicked = false;
+    return groupHeaderImpl(strId, label, forceOpen, &state, checkClicked);
 }
 
 bool TableRowSelectable(const char* label, bool selected) {

@@ -247,6 +247,7 @@ void SearchView::search(App& app) {
                 for (const auto& s : batch->samples) receivedOffers_ += s.size();
                 mergedRequests_ = okCount;
                 offers_ = mergeOfferSamples(std::move(batch->samples));
+                rentedOffers_.clear();  // fresh results; own machines are marked via the instance list
                 recompute(app);
                 // A partial failure still yields results; mention it without hiding them.
                 error_ = okCount < n ? std::format("{} of {} requests failed: {}", n - okCount, n, batch->error)
@@ -312,6 +313,7 @@ void SearchView::handleAction(App& app, ui::OfferAction a, const Offer& o) {
     Settings& s = app.settings();
     switch (a) {
         case ui::OfferAction::Rent: openRent(app, o); break;
+        case ui::OfferAction::RentNow: rentNow(app, o); break;
         case ui::OfferAction::CopyOfferId:
             ImGui::SetClipboardText(std::to_string(o.id).c_str());
             app.toasts().info("Copied offer ID " + std::to_string(o.id));
@@ -359,8 +361,7 @@ void SearchView::prepareTemplatePicker(App& app) {
     loadTemplateTab(app, tplTab_, false);
 }
 
-void SearchView::applyTemplateToRent(App& app, const Template& t) {
-    RentState& r = rent_;
+void SearchView::applyTemplateToRent(App& app, RentState& r, const Template& t) {
     r.templateName = t.name;
     r.templateFilters = t.searchParams;
     r.image = t.imageWithTag();
@@ -377,8 +378,7 @@ void SearchView::applyTemplateToRent(App& app, const Template& t) {
     r.args.clear();
 }
 
-void SearchView::openRent(App& app, const Offer& o) {
-    const Settings& s = app.settings();
+SearchView::RentState SearchView::newRentState(App& app, const Offer& o) {
     RentState r;
     r.offer = o;
     r.bidPrice = o.minBid ? *o.minBid * 1.05 : o.dphTotal.value_or(0.0);
@@ -386,10 +386,72 @@ void SearchView::openRent(App& app, const Offer& o) {
     r.volumeId = rent_.volumeId;
     r.volumeSizeGb = rent_.volumeSizeGb;
     r.mountPath = rent_.mountPath;
-    rent_ = std::move(r);
-    applyTemplateToRent(app, s.currentTemplate);
+    applyTemplateToRent(app, r, app.settings().currentTemplate);
+    return r;
+}
+
+void SearchView::openRent(App& app, const Offer& o) {
+    rent_ = newRentState(app, o);
     openRentPopup_ = true;
     if (rent_.volumeMode == 1 && !volumesRes_.loaded) volumesRes_.fetch(app, cmd::showVolumes());
+}
+
+ApiCall SearchView::buildRentCall(const RentState& r, bool interruptible) {
+    const Offer& o = r.offer;
+    cmd::CreateInstanceParams params;
+    params.offerId = o.id;
+    params.image = r.image;
+    params.diskGb = r.diskGb;
+    params.label = r.label;
+    params.env = buildDockerOptions(DockerOptions{r.env, r.ports, r.extraDocker});
+    params.onstartCmd = r.onstart;
+    if (r.useTemplateHash) params.templateHash = r.templateHash;
+    params.ssh = true;
+    params.jupyter = r.launchMode == 1;
+    params.argsMode = r.launchMode == 2;
+    params.args = r.args;
+    params.direct = r.direct;
+    if (interruptible) params.bidPrice = r.bidPrice;
+    if (r.volumeMode == 1 && r.volumeId) params.linkVolume = r.volumeId;
+    if (r.volumeMode == 2) {
+        if (auto ask = jsonutil::optInt(o.raw, "avail_vol_ask_id")) params.createVolume = *ask;
+        params.volumeSizeGb = r.volumeSizeGb;
+    }
+    if (r.volumeMode != 0) params.mountPath = r.mountPath;
+    params.cancelUnavail = r.cancelUnavail;
+    return cmd::createInstance(params);
+}
+
+// On-demand RENT works like the vast.ai console: one click rents with the current template and the panel's disk /
+// volume settings (right-click > Rent... opens the dialog). Anything that needs a decision opens the dialog instead.
+void SearchView::rentNow(App& app, const Offer& o) {
+    if (rentingOffers_.contains(o.id) || rentedOffers_.contains(o.id)) return;
+    RentState r = newRentState(app, o);
+    std::string why;
+    if (r.image.empty() && !r.useTemplateHash) {
+        why = "The template has no image.";
+    } else if (!unmetRequirements(o, templateRequirements(r.templateFilters, r.image)).empty()) {
+        why = "This machine does not meet the template's requirements.";
+    } else if (r.volumeMode == 1 && !r.volumeId) {
+        why = "Select the volume to link.";
+    } else if (r.volumeMode == 2 && !jsonutil::optInt(o.raw, "avail_vol_ask_id")) {
+        why = "This offer has no local volume offer available.";
+    }
+    if (!why.empty()) {
+        app.toasts().info("Check the rental settings", why);
+        openRent(app, o);
+        return;
+    }
+    const std::int64_t offerId = o.id;
+    rentingOffers_.insert(offerId);
+    app.client().submit(buildRentCall(r, false), [this, &app, offerId](const ApiResult& res) {
+        rentingOffers_.erase(offerId);
+        if (!res.ok) return;
+        rentedOffers_.insert(offerId);
+        const auto id = jsonutil::optInt(res.data, "new_contract");
+        app.toasts().success("Instance created", id ? "Instance ID " + std::to_string(*id) : res.text);
+        app.refreshInstances();
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -550,17 +612,37 @@ void SearchView::drawTopBar(App& app) {
         for (const auto& g : gpuCatalog_) {
             std::vector<const std::string*> visible;
             int selectedCount = 0;
+            std::size_t visibleSelected = 0;
             for (const auto& m : g.models) {
                 const bool sel = std::find(f.gpuModels.begin(), f.gpuModels.end(), m) != f.gpuModels.end();
                 if (sel) ++selectedCount;
                 if (!searching || fmt::containsCi(m, query) || fmt::containsCi(gpuSearchNames_[m], query)) {
                     visible.push_back(&m);
+                    if (sel) ++visibleSelected;
                 }
             }
             if (visible.empty()) continue;
             ++shownGroups;
             const std::string header = selectedCount > 0 ? std::format("{}  ({} selected)", g.name, selectedCount) : g.name;
-            if (ui::GroupHeader(("##gpug_" + g.name).c_str(), header.c_str(), searching)) {
+            // The group's box reflects (and toggles) the models listed under it, i.e. only the matches while searching.
+            const ui::CheckState groupState = visibleSelected == 0                ? ui::CheckState::Off
+                                              : visibleSelected == visible.size() ? ui::CheckState::On
+                                                                                  : ui::CheckState::Mixed;
+            bool groupClicked = false;
+            const bool groupOpen =
+                ui::GroupHeaderCheck(("##gpug_" + g.name).c_str(), header.c_str(), groupState, &groupClicked, searching);
+            if (groupClicked) {
+                for (const std::string* m : visible) {
+                    auto it = std::find(f.gpuModels.begin(), f.gpuModels.end(), *m);
+                    if (groupState == ui::CheckState::On) {
+                        if (it != f.gpuModels.end()) f.gpuModels.erase(it);
+                    } else if (it == f.gpuModels.end()) {
+                        f.gpuModels.push_back(*m);
+                    }
+                }
+                filtersChanged(app);
+            }
+            if (groupOpen) {
                 ImGui::Indent();
                 for (const std::string* m : visible) {
                     auto it = std::find(f.gpuModels.begin(), f.gpuModels.end(), *m);
@@ -1024,6 +1106,7 @@ void SearchView::drawCards(App& app) {
     ctx.currency = &st.currency;
     ctx.interruptible = st.filters.rentalType == RentalType::Interruptible;
     ctx.diskGb = st.filters.effectiveDiskGb();
+    ctx.rentNow = st.filters.rentalType == RentalType::OnDemand;
     // Cards share one height so the list can be clipped; it is the measured content height of the cards
     // drawn last frame (all cards have the same layout), with a formula-based estimate on the first frame.
     float measured = 0.0f;
@@ -1035,7 +1118,9 @@ void SearchView::drawCards(App& app) {
     while (clipper.Step()) {
         for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
             const std::size_t idx = visible_[static_cast<std::size_t>(i)];
-            ctx.rentedByMe = offers_[idx].machineId && rentedMachines_.contains(*offers_[idx].machineId);
+            ctx.rentedByMe = (offers_[idx].machineId && rentedMachines_.contains(*offers_[idx].machineId)) ||
+                             rentedOffers_.contains(offers_[idx].id);
+            ctx.renting = rentingOffers_.contains(offers_[idx].id);
             ctx.incompatible = isIncompatible(offers_[idx], st.filters);
             if (ctx.incompatible) ctx.incompatibleWhy = incompatibleReason(offers_[idx], st.filters);
             const auto a = ui::OfferCard(offers_[idx], metrics_[idx], defects_[idx], ctx);
@@ -1132,6 +1217,7 @@ void SearchView::drawTable(App& app) {
     const std::vector<std::size_t>& rows = tableRows_;
 
     std::optional<std::pair<ui::OfferAction, std::size_t>> pending;
+    const bool rentNow = st.filters.rentalType == RentalType::OnDemand;
     ImGuiListClipper clipper;
     clipper.Begin(static_cast<int>(rows.size()));
     while (clipper.Step()) {
@@ -1141,7 +1227,7 @@ void SearchView::drawTable(App& app) {
             const OfferMetrics& m = metrics_[idx];
             const bool defective = defects_[idx].defective();
             const bool incompatible = isIncompatible(o, st.filters);
-            const bool rentedByMe = o.machineId && rentedMachines_.contains(*o.machineId);
+            const bool rentedByMe = (o.machineId && rentedMachines_.contains(*o.machineId)) || rentedOffers_.contains(o.id);
             ImGui::TableNextRow();
             ImGui::PushID(static_cast<int>(idx));
             if (rentedByMe) ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ui::col(ui::palette().info, 0.10f));
@@ -1160,11 +1246,10 @@ void SearchView::drawTable(App& app) {
                         ImGui::SmallButton("RENTED");
                         ImGui::PopStyleColor();
                         ImGui::EndDisabled();
-                        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                            ImGui::SetTooltip("Rented by you: you already have an instance on this machine.");
-                        }
+                    } else if (rentingOffers_.contains(o.id)) {
+                        ui::SpinnerText("##renting", "renting");
                     } else if (ImGui::SmallButton("RENT")) {
-                        pending = std::pair{ui::OfferAction::Rent, idx};
+                        pending = std::pair{rentNow ? ui::OfferAction::RentNow : ui::OfferAction::Rent, idx};
                     }
                 } else if (c == ColTflopsPerDollar && m.rankTflopsPerDollar) {
                     ui::TextWithColor(ui::rankColor(*m.rankTflopsPerDollar), textCell(c, o, m, st.currency).c_str());
@@ -1401,29 +1486,7 @@ void SearchView::drawRentModal(App& app) {
     ImGui::SetCursorPosX(labelW);
     ImGui::Checkbox("Fail if the machine is unavailable (--cancel-unavail)", &r.cancelUnavail);
 
-    // Build the call and show the exact command.
-    cmd::CreateInstanceParams params;
-    params.offerId = o.id;
-    params.image = r.image;
-    params.diskGb = r.diskGb;
-    params.label = r.label;
-    params.env = buildDockerOptions(DockerOptions{r.env, r.ports, r.extraDocker});
-    params.onstartCmd = r.onstart;
-    if (r.useTemplateHash) params.templateHash = r.templateHash;
-    params.ssh = true;
-    params.jupyter = r.launchMode == 1;
-    params.argsMode = r.launchMode == 2;
-    params.args = r.args;
-    params.direct = r.direct;
-    if (interruptible) params.bidPrice = r.bidPrice;
-    if (r.volumeMode == 1 && r.volumeId) params.linkVolume = r.volumeId;
-    if (r.volumeMode == 2) {
-        if (auto ask = jsonutil::optInt(o.raw, "avail_vol_ask_id")) params.createVolume = *ask;
-        params.volumeSizeGb = r.volumeSizeGb;
-    }
-    if (r.volumeMode != 0) params.mountPath = r.mountPath;
-    params.cancelUnavail = r.cancelUnavail;
-    const ApiCall call = cmd::createInstance(params);
+    const ApiCall call = buildRentCall(r, interruptible);
 
     ImGui::Separator();
     ImGui::Spacing();
@@ -1541,7 +1604,7 @@ void SearchView::drawTemplatePicker(App& app) {
     if (chosen && *chosen >= 0 && static_cast<std::size_t>(*chosen) < rows.size()) {
         const Template t = rows[static_cast<std::size_t>(*chosen)].get<Template>();
         if (pickerForRent_) {
-            applyTemplateToRent(app, t);  // this rental only; the Search page keeps its template
+            applyTemplateToRent(app, rent_, t);  // this rental only; the Search page keeps its template
         } else {
             app.setCurrentTemplate(t);
             app.toasts().info("Template selected", t.name);

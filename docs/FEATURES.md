@@ -8,7 +8,8 @@
 
 - #GPUs toggles, rental type (on-demand / interruptible / reserved), multi-select GPU model picker with search
   (the vast.ai console's model list from `/api/v0/gpu_types/`, grouped by family - RTX 5000/4000/3000/2000 Series,
-  GTX, Titan, RTX PRO / Ada / A, Quadro, Data Center, AMD Instinct / Radeon, Other - and sorted by model and variant),
+  GTX, Titan, RTX PRO / Ada / A, Quadro, Data Center, AMD Instinct / Radeon, Other - and sorted by model and variant;
+  each group has a check box that selects / clears all its listed models and shows all / some / none),
   region (planet / continent / country), sort (price, TFLOPS/$/hr, DLP/$/hr, reliability, inet, disk bandwidth,
   duration, VRAM, CUDA) with asc/desc, card view or a sortable, resizable, reorderable, hideable table.
 - Filter panel with template box (change/edit template), secure cloud, disk size + volume, presets, reliability,
@@ -53,6 +54,10 @@
   with *Change...* (pick another template for this rental only; a warning shows if the machine does not meet its
   requirements); the template configuration (image/template hash, SSH/Jupyter/entrypoint + direct, env vars,
   ports, docker options, on-start script) is folded into a collapsed *Template settings* section.
+- **RENT** works like the vast.ai console: for on-demand offers one click rents the machine at once with the
+  selected template and the panel's disk / volume settings (spinner while renting, then *RENTED*). Right-click >
+  *Rent...* opens the Rent dialog to configure the rental first; it also opens when the template does not fit the
+  machine or a volume still has to be chosen. Interruptible and reserved offers always use the dialog (bid).
 
 ## Search completeness
 
@@ -96,7 +101,9 @@ search to search because the server keeps sampling. Each request at limit 1000 d
   machine's GPU,
   performance, CPU and cores, RAM, board, PCIe, disk, network, CUDA / driver / Ubuntu, reliability, location and
   verification.
-- Logs window: separate Instance / Daemon log tabs, line numbers, compact line spacing, auto-refresh, save to file;
+- Logs window: separate Instance / Daemon log tabs (opens on Daemon logs unless the instance shows *running*;
+  the tab you pick by hand is remembered per instance until VastGui is closed),
+  line numbers, compact line spacing, auto-refresh, save to file;
   tail defaults to 1000 lines, -/+ step 1000, *Max* = 20000.
 - Copy SSH command / SCP URL, open Jupyter, change bid, prepay, deposit, execute, copy files (between remote
   locations), cloud copy, snapshot, attach SSH key, create template from instance, recycle, update, blacklist the

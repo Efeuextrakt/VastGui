@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.4.3 - 2026-11-12
+
+### Search
+- RENT on on-demand offers now rents at once, like the vast.ai console, using the selected template and the
+  panel's disk / volume settings (spinner while renting, then *RENTED*). Right-click > *Rent...* opens the Rent
+  dialog to configure the rental first; it also opens when the template does not fit the machine or a volume still
+  has to be chosen. Interruptible and reserved offers keep the dialog. The *RENTED* button has no tooltip anymore.
+- GPU model dropdown: every group has a check box. Clicking it selects all models listed in the group (only the
+  matches while searching), or clears them when all are selected. It is ticked when all are selected, shows a dash
+  when some are, and follows the individual check boxes. Clicking the rest of the group row still opens/closes it.
+
+### Instances
+- Logs: the window opens on *Daemon logs* unless the instance shows *running* (creating, loading, starting,
+  stopped, ...). The tab you pick by hand is remembered per instance until VastGui is closed.
+- Fixed: switching to *Daemon logs* while the instance logs were still loading showed the instance logs there.
+  vast.ai returns both through the same file, so the two tabs now request one after the other.
+
 ## 1.4.2 - 2026-11-11
 
 ### Keys

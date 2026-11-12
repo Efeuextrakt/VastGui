@@ -5,6 +5,7 @@
 #include "widgets/Widgets.hpp"
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -37,8 +38,14 @@ private:
         bool open = true;
         bool autoRefresh = true;
         int intervalSec = 10;
-        int active = 0;  // 0 instance logs, 1 daemon logs
+        int active = 0;          // 0 instance logs, 1 daemon logs
+        bool selectActive = true;  // make the tab bar show `active` (new windows)
+        // vast.ai delivers both log kinds of an instance through the same result file, so only one request per
+        // instance may run at a time; a tab's request made meanwhile waits here.
+        bool queued[2] = {false, false};
         LogTab tabs[2];
+
+        [[nodiscard]] bool busy() const { return tabs[0].res.loading || tabs[1].res.loading; }
     };
 
     void fetchLogs(App& app, LogWindow& w, int tab);
@@ -55,7 +62,7 @@ private:
     void drawRowMenu(App& app, const Instance& inst);
     void drawDialogs(App& app);
     void openDialog(Dialog d, const Instance& inst);
-    void openLogs(App& app, std::int64_t id);
+    void openLogs(App& app, const Instance& inst);
     [[nodiscard]] std::vector<std::int64_t> selectedIds() const;
 
     std::set<std::int64_t> selected_;
@@ -78,6 +85,7 @@ private:
     Resource sshKeys_;
 
     std::vector<std::unique_ptr<LogWindow>> logWindows_;
+    std::map<std::int64_t, int> logTabChoice_;  // log tab last picked by hand, per instance (this session)
 };
 
 }  // namespace vast
