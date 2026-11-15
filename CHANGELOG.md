@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.4.4 - 2026-11-15
 
 ### Instances
 - Star button next to the blacklist (Ban) button, and *Add machine ... to favorites* in the row menu: marks the
