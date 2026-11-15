@@ -16,7 +16,7 @@
   duration, specific machines / hosts, machine options, CUDA/driver/Ubuntu minimums, 20 min/max range sliders.
 - **Presets** (under *Disk Space*): pick a saved filter set in the dropdown (trash icon deletes it), then *Save*
   (current filters, as a new name or overwriting the selected one), *Load* (apply the selected preset) or *Reset*
-  (all filters back to the defaults).
+  (all filters back to the defaults; disk space 8 GB or the template's recommended size, rounded up to whole GB).
 - The *Search* button leads the results line, so it stays in the same place whatever the window size.
 - **Machines / Hosts**: machine and/or host IDs (separated by spaces or commas) limit the search to exactly those
   machines (`machine_id` / `host_id` in the query sent to vast.ai, so they are found even outside the random

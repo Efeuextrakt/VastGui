@@ -893,6 +893,7 @@ void SearchView::drawFilterPanel(App& app) {
         ImGui::BeginDisabled(selectedPreset_.empty());
         if (ui::SecondaryButton(ICON_FA_FOLDER_OPEN " Load", ImVec2(third, 0))) {
             f = st.presets.at(selectedPreset_);
+            updateTemplateRequirements(app);  // runtime-only template fields are not part of presets
             filtersChanged(app, true);
             app.toasts().info("Loaded preset \"" + selectedPreset_ + "\"");
         }
@@ -905,10 +906,15 @@ void SearchView::drawFilterPanel(App& app) {
             SearchFilters fresh;
             if (auto k = sortKeyFromId(st.defaultSort)) fresh.sortKey = *k;
             fresh.sortDesc = st.defaultSortDesc;
+            // Disk: 8 GB, or the selected template's recommended disk space rounded up to whole GB.
+            fresh.diskGb = std::max(8.0, std::ceil(st.currentTemplate.recommendedDiskGb.value_or(0.0)));
             f = fresh;
+            updateTemplateRequirements(app);
             filtersChanged(app, true);
         }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reset all filters to the defaults");
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Reset all filters to the defaults (disk space: 8 GB or the template's minimum)");
+        }
     }
 
     ImGui::SeparatorText("Reliability");

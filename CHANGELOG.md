@@ -13,6 +13,9 @@
   asked from vast.ai directly (like the Machine IDs field), so they are found outside the random sample. The
   results line shows "favorites only (N machines)".
 - Right-click an offer > *Add machine to favorites* / *Remove machine from favorites*.
+- *Reset* (Presets) sets the disk space to 8 GB, or to the selected template's recommended disk space rounded up to
+  the next GB. *Reset* and *Load* also keep the selected template's requirements (CUDA, disk), which were dropped
+  until the template was changed again.
 
 ### Settings
 - New *Favorites* section to view, add and remove favorite machines (like the Blacklist).
