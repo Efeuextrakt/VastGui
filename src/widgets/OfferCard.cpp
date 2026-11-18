@@ -240,7 +240,9 @@ OfferAction OfferCard(const Offer& o, const OfferMetrics& m, const DefectInfo& d
         if (ImGui::IsItemHovered()) OfferPriceTooltip(o, cur, ctx.diskGb);
         dimLine(ctx.interruptible ? "suggested bid  + bandwidth" : "+ bandwidth");
         if (ImGui::IsItemHovered()) OfferPriceTooltip(o, cur, ctx.diskGb);
-        if (ctx.rentedByMe) {
+        if (ctx.actionLabel) {
+            if (*ctx.actionLabel && SecondaryButton(ctx.actionLabel, ImVec2(-FLT_MIN, 0))) action = OfferAction::ListAction;
+        } else if (ctx.rentedByMe) {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(p.info.x, p.info.y, p.info.z, 0.22f));
             ImGui::PushStyleColor(ImGuiCol_Text, p.info);
             ImGui::BeginDisabled();

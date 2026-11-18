@@ -7,7 +7,8 @@
 
 namespace vast::ui {
 
-enum class OfferAction { None, Rent, RentNow, CopyOfferId, CopyMachineId, CopyHostId, HideHost, HideMachine, ToggleFavorite, ViewJson };
+enum class OfferAction { None, Rent, RentNow, CopyOfferId, CopyMachineId, CopyHostId, HideHost, HideMachine, ToggleFavorite, ViewJson,
+                         ListAction };
 
 struct OfferCardContext {
     const CurrencyFormat* currency = nullptr;
@@ -16,6 +17,8 @@ struct OfferCardContext {
     bool rentNow = false;         // RENT rents at once (on-demand); otherwise it opens the Rent dialog
     bool renting = false;         // a one-click rental of this offer is in flight
     bool favorite = false;        // the machine is on the user's favorites
+    // Replaces RENT (e.g. "REMOVE" on the Favorites & Blacklist page; returns ListAction). "" = no button.
+    const char* actionLabel = nullptr;
     std::string incompatibleWhy;
     bool interruptible = false;   // price is the suggested bid
     std::optional<double> diskGb;  // disk size the price includes (for the price tooltip)

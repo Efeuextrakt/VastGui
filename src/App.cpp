@@ -17,6 +17,7 @@
 #include "views/ServerlessView.hpp"
 #include "views/SettingsView.hpp"
 #include "views/StorageView.hpp"
+#include "views/MachineListsView.hpp"
 #include "views/TeamView.hpp"
 #include "views/TemplatesView.hpp"
 #include "widgets/Badge.hpp"
@@ -39,6 +40,7 @@ struct NavItem {
 
 constexpr NavItem kNav[] = {
     {Page::Search, ICON_FA_MAGNIFYING_GLASS, "Search", false},
+    {Page::MachineLists, ICON_FA_STAR, "Favorites & Blacklist", false},
     {Page::Templates, ICON_FA_LAYER_GROUP, "Templates", false},
     {Page::Instances, ICON_FA_SERVER, "Instances", false},
     {Page::Storage, ICON_FA_HARD_DRIVE, "Storage", false},
@@ -74,6 +76,7 @@ App::App() : paths_(resolveConfigPaths()) {
     });
 
     search_ = std::make_unique<SearchView>();
+    machineLists_ = std::make_unique<MachineListsView>();
     templates_ = std::make_unique<TemplatesView>();
     instancesView_ = std::make_unique<InstancesView>();
     storage_ = std::make_unique<StorageView>();
@@ -588,6 +591,7 @@ void App::drawPage() {
     }
     switch (page_) {
         case Page::Search: search_->draw(*this); break;
+        case Page::MachineLists: machineLists_->draw(*this); break;
         case Page::Templates: templates_->draw(*this); break;
         case Page::Instances: instancesView_->draw(*this); break;
         case Page::Storage: storage_->draw(*this); break;

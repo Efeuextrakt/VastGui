@@ -81,8 +81,8 @@ src/backend/    ApiCall.hpp, Commands (REST request catalogue), RestBackend, Htt
 src/model/      Offer, Instance, Template, Machine (+ tolerant JSON accessors)
 src/logic/      QueryBuilder, Metrics, DefectFilter, SearchFilters, Regions, Format, DockerOptions, GpuCatalog,
                 ApiKeyPermissions (no ImGui)
-src/views/      Search, Instances, Templates, Storage, Serverless, Billing(+Earnings), Team(+Audit logs),
-                Keys, Hosting, Console (Activity log page), Settings
+src/views/      Search, MachineLists (Favorites & Blacklist), Instances, Templates, Storage, Serverless,
+                Billing(+Earnings), Team(+Audit logs), Keys, Hosting, Console (Activity log page), Settings
 src/widgets/    OfferCard, RangeSlider, Toast, Spinner, Badge, Widgets (JSON table/tree, buttons)
 src/embedded/   Fonts.hpp - Roboto, Cousine, Font Awesome 6 as compressed C arrays (tools/gen_fonts.bat)
 tests/          doctest unit tests with embedded JSON fixtures

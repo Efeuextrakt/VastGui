@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Favorites & Blacklist page
+- New page (sidebar, below *Search*) with the favorite and blacklisted machines as Search cards: GPU, specs,
+  location, reliability, current price and the favorite / blacklisted marks. Each machine shows its current
+  on-demand offer (the whole-machine offer when it is split), priced for the Search panel's disk size.
+- *REMOVE* takes a machine off the list (instead of RENT); right-click a card for the usual offer menu
+  (*Rent...* opens the Rent dialog on the Search page).
+- Machines without an offer right now (unlisted, fully rented or offline) are listed below the cards, also with
+  *Remove*.
+- The *Blacklist* tab also lists blacklisted hosts, each with *Remove host* and the cards of its listed machines.
+- Loads when the page is opened (at most once a minute), when a machine or host is added, and on *Refresh*.
+
 ### Instances
 - Fixed: offline instances were shown at the full price (GPU + storage). vast.ai bills neither GPU nor storage
   while the machine is offline, so they now cost $0/hr - in the *$/hr* column, the header total, the $/hr trend

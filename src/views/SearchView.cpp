@@ -314,6 +314,14 @@ void SearchView::recompute(App& app) {
     }
 }
 
+void SearchView::handleOfferAction(App& app, ui::OfferAction a, const Offer& o) {
+    if (a == ui::OfferAction::Rent || a == ui::OfferAction::RentNow) {
+        app.navigate(Page::Search);  // the Rent dialog is part of the Search page
+        a = ui::OfferAction::Rent;
+    }
+    handleAction(app, a, o);
+}
+
 void SearchView::handleAction(App& app, ui::OfferAction a, const Offer& o) {
     Settings& s = app.settings();
     switch (a) {
@@ -376,7 +384,8 @@ void SearchView::handleAction(App& app, ui::OfferAction a, const Offer& o) {
                 jsonWindows_.emplace_back(o.id, o.raw);
             }
             break;
-        case ui::OfferAction::None: break;
+        case ui::OfferAction::None:
+        case ui::OfferAction::ListAction: break;
     }
 }
 

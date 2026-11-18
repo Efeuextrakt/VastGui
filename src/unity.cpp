@@ -30,6 +30,7 @@
 #include "views/HostingView.cpp"
 #include "views/InstancesView.cpp"
 #include "views/KeysView.cpp"
+#include "views/MachineListsView.cpp"
 #include "views/SearchView.cpp"
 #include "views/ServerlessView.cpp"
 #include "views/SettingsView.cpp"

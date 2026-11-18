@@ -70,7 +70,7 @@ endif()
 add_executable(VastGui WIN32
     src/main.cpp src/App.cpp src/Config.cpp src/Theme.cpp
     src/views/BillingView.cpp src/views/ConsoleView.cpp src/views/HostingView.cpp src/views/InstancesView.cpp
-    src/views/KeysView.cpp src/views/SearchView.cpp src/views/ServerlessView.cpp src/views/SettingsView.cpp
+    src/views/KeysView.cpp src/views/MachineListsView.cpp src/views/SearchView.cpp src/views/ServerlessView.cpp src/views/SettingsView.cpp
     src/views/StorageView.cpp src/views/TeamView.cpp src/views/TemplatesView.cpp
     src/widgets/Badge.cpp src/widgets/OfferCard.cpp src/widgets/RangeSlider.cpp src/widgets/Spinner.cpp
     src/widgets/Toast.cpp src/widgets/Widgets.cpp)

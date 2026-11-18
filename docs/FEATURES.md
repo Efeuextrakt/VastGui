@@ -44,6 +44,11 @@
   gold ID with a star). *Favorites Only* in *Machine Options* searches only them - asked from vast.ai directly like
   the Machine IDs field, so they are found outside the random sample. A machine is never favorite and blacklisted
   at once: adding it to one list removes it from the other.
+- **Favorites & Blacklist page** (sidebar): the favorite and blacklisted machines as Search cards (their current
+  on-demand offer, the whole-machine offer when split, priced for the panel's disk size) with *REMOVE* instead of
+  RENT; right-click for the offer menu (*Rent...* opens the Rent dialog on the Search page). Machines without an
+  offer right now are listed below with *Remove*. The *Blacklist* tab also shows blacklisted hosts with
+  *Remove host* and the cards of their listed machines.
   Deverified offers are only listed when *Unverified Machines* and its sub-option *Deverified Machines* are ticked.
   Verification tags: verified green, unverified yellow, deverified orange.
 - **Incompatible machines**: offers that fail the selected template's requirements (its `extra_filters`, e.g.

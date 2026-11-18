@@ -19,6 +19,7 @@ namespace vast {
 
 enum class Page {
     Search,
+    MachineLists,
     Templates,
     Instances,
     Storage,
@@ -35,6 +36,7 @@ enum class Page {
 };
 
 class SearchView;
+class MachineListsView;
 class TemplatesView;
 class InstancesView;
 class StorageView;
@@ -148,6 +150,7 @@ private:
     std::uint64_t activityVersion_ = 0;
 
     std::unique_ptr<SearchView> search_;
+    std::unique_ptr<MachineListsView> machineLists_;
     std::unique_ptr<TemplatesView> templates_;
     std::unique_ptr<InstancesView> instancesView_;
     std::unique_ptr<StorageView> storage_;

@@ -36,6 +36,8 @@ public:
     }
     // Pre-selects an existing volume to link on the next rental.
     void preselectVolume(App& app, std::int64_t volumeId);
+    // Right-click menu actions of offers shown on other pages; Rent... switches to Search for the Rent dialog.
+    void handleOfferAction(App& app, ui::OfferAction a, const Offer& o);
 
 private:
     struct RentState {
