@@ -14,6 +14,8 @@
 - Loads when the page is opened (at most once a minute), when a machine or host is added, and on *Refresh*.
 - Card or table view (buttons next to *Refresh*, saved): the table is Search's offer table (sortable, resizable,
   reorderable, hideable columns; its own column choice) with *REMOVE* / *REMOVE HOST* in the last column.
+- Offer tables (here and in Search): blacklisted machines and machines of blacklisted hosts show a grey ID with a
+  ban icon, like favorites show a gold ID with a star (the same colours as the card borders).
 
 ### Instances
 - Fixed: offline instances were shown at the full price (GPU + storage). vast.ai bills neither GPU nor storage

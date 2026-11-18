@@ -38,7 +38,8 @@
   to list them with a red *defective* tag and border.
 - **Blacklisted machines** are not "defective": blacklist a machine with the Ban button on the Instances page or an
   offer's right-click menu (manage the list in Settings > Blacklist). Their offers are hidden; tick *Blacklisted
-  Machines* in *Machine Options* to list them with a grey *blacklisted* tag and border.
+  Machines* in *Machine Options* to list them with a grey *blacklisted* tag and border (table: grey ID with a ban
+  icon).
 - **Favorite machines**: the star button on the Instances page (next to the Ban button) or an offer's right-click
   menu adds a machine (manage the list in Settings > Favorites). Their offers get a gold star and border (table:
   gold ID with a star). *Favorites Only* in *Machine Options* searches only them - asked from vast.ai directly like

@@ -238,11 +238,13 @@ OfferTableResult OfferTable::draw(const char* id, std::span<const Offer> offers,
             for (int c = 0; c < ColCount; ++c) {
                 if (!ImGui::TableSetColumnIndex(c)) continue;
                 if (c == ColId) {
-                    // Favorite machines: gold ID with a star.
-                    if (info.favorite) ImGui::PushStyleColor(ImGuiCol_Text, p.caution);
-                    TableRowSelectable(info.favorite ? (ICON_FA_STAR " " + textCell(c, o, m, cur)).c_str() : textCell(c, o, m, cur).c_str(),
-                                       false);
-                    if (info.favorite) ImGui::PopStyleColor();
+                    // Favorite machines: gold ID with a star; blacklisted machines / hosts: grey ID with a ban icon
+                    // (same colours as the card borders). A favorite on a blacklisted host keeps the star.
+                    const bool banned = !info.favorite && d.blacklisted();
+                    const char* icon = info.favorite ? ICON_FA_STAR " " : banned ? ICON_FA_BAN " " : "";
+                    if (info.favorite || banned) ImGui::PushStyleColor(ImGuiCol_Text, info.favorite ? p.caution : p.textDim);
+                    TableRowSelectable((icon + textCell(c, o, m, cur)).c_str(), false);
+                    if (info.favorite || banned) ImGui::PopStyleColor();
                     if (ImGui::BeginPopupContextItem("##rowctx")) {
                         if (auto a = OfferContextMenuItems(o, !info.rentedByMe, info.favorite); a != OfferAction::None) {
                             result.action = a;
