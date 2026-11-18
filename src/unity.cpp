@@ -40,6 +40,7 @@
 
 #include "widgets/Badge.cpp"
 #include "widgets/OfferCard.cpp"
+#include "widgets/OfferTable.cpp"
 #include "widgets/RangeSlider.cpp"
 #include "widgets/Spinner.cpp"
 #include "widgets/Toast.cpp"

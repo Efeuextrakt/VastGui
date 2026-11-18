@@ -48,7 +48,8 @@
   on-demand offer, the whole-machine offer when split, priced for the panel's disk size) with *REMOVE* instead of
   RENT; right-click for the offer menu (*Rent...* opens the Rent dialog on the Search page). Machines without an
   offer right now are listed below with *Remove*. The *Blacklist* tab also shows blacklisted hosts with
-  *Remove host* and the cards of their listed machines.
+  *Remove host* and the cards of their listed machines. Card or table view like Search (the table has its own
+  column choice; *REMOVE* / *REMOVE HOST* in the last column).
   Deverified offers are only listed when *Unverified Machines* and its sub-option *Deverified Machines* are ticked.
   Verification tags: verified green, unverified yellow, deverified orange.
 - **Incompatible machines**: offers that fail the selected template's requirements (its `extra_filters`, e.g.

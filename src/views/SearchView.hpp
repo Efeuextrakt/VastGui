@@ -7,6 +7,7 @@
 #include "model/Template.hpp"
 #include "views/Resource.hpp"
 #include "widgets/OfferCard.hpp"
+#include "widgets/OfferTable.hpp"
 #include "widgets/Widgets.hpp"
 
 #include <array>
@@ -101,10 +102,7 @@ private:
     std::set<std::int64_t> rentedMachines_;  // machines of the user's instances (all states)
     std::size_t receivedOffers_ = 0;  // offers in all responses of the last search, before merging
     int mergedRequests_ = 0;
-    std::vector<std::size_t> tableRows_;  // visible_ in table sort order (cached)
-    bool tableRowsDirty_ = true;
-    int tableSortCol_ = -1;
-    bool tableSortDesc_ = false;
+    ui::OfferTable table_;
     bool loading_ = false;
     std::string error_;
     std::vector<std::string> warnings_;
@@ -144,8 +142,6 @@ private:
 
     Resource volumesRes_;
     std::vector<std::pair<std::int64_t, json>> jsonWindows_;
-    bool tableColumnsApplied_ = false;
-    bool syncTableSort_ = true;
     float cardHeight_ = 0.0f;
 };
 

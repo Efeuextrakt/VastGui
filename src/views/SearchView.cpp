@@ -45,121 +45,13 @@ std::string rangeLabel(const RangeMeta& m, const Range& r) {
     return "<= " + f(*r.max) + unit;
 }
 
-enum OfferCol {
-    ColId, ColMachine, ColHost, ColGpu, ColNum, ColVram, ColTotalVram, ColTflops, ColDlperf, ColPrice,
-    ColTflopsPerDollar, ColDlpPerDollar, ColReliability, ColDuration, ColInetUp, ColInetDown, ColDiskBw,
-    ColDisk, ColCpu, ColCores, ColRam, ColPcie, ColCuda, ColLocation, ColVerification, ColPorts, ColRent, ColCount
-};
-
-struct OfferColumn {
-    const char* name;
-    float width;
-    bool defaultHidden;
-};
-
-constexpr OfferColumn kOfferColumns[ColCount] = {
-    {"Offer ID", 80, false}, {"Machine", 65, false},   {"Host", 65, true},          {"GPU", 120, false},
-    {"#", 28, false},        {"VRAM/GPU", 70, false},  {"Total VRAM", 75, true},    {"TFLOPS", 60, false},
-    {"DLPerf", 60, false},   {"$/hr", 65, false},      {"TFLOPS/$/hr", 85, false},  {"DLP/$/hr", 75, false},
-    {"Reliability", 75, false}, {"Max Dur", 70, false},
-    {"Inet Up", 65, false},  {"Inet Down", 70, false}, {"Disk BW", 65, false},      {"Disk GB", 60, true},
-    {"CPU", 160, true},      {"Cores", 55, true},      {"RAM GB", 60, true},        {"PCIe", 70, true},
-    {"CUDA", 45, false},     {"Location", 110, false}, {"Status", 80, false},       {"Ports", 50, true},
-    {"", 60, false},
-};
-
-constexpr std::pair<int, SortKey> kColumnSortKeys[] = {
-    {ColNum, SortKey::NumGpus},          {ColVram, SortKey::Vram},
-    {ColTflops, SortKey::Tflops},        {ColDlperf, SortKey::Dlperf},
-    {ColPrice, SortKey::Price},          {ColDlpPerDollar, SortKey::DlpPerDollar},
-    {ColTflopsPerDollar, SortKey::TflopsPerDollar}, {ColReliability, SortKey::Reliability},
-    {ColDuration, SortKey::Duration},    {ColInetUp, SortKey::InetUp},
-    {ColInetDown, SortKey::InetDown},    {ColDiskBw, SortKey::DiskBw},
-    {ColCuda, SortKey::Cuda},
-};
-
-std::optional<SortKey> sortKeyForColumn(int c) {
-    for (const auto& [col, key] : kColumnSortKeys) {
-        if (col == c) return key;
-    }
-    return std::nullopt;
-}
-
-std::optional<int> sortColumnFor(SortKey k) {
-    for (const auto& [col, key] : kColumnSortKeys) {
-        if (key == k) return col;
-    }
-    return std::nullopt;
-}
-
-std::optional<double> numericCell(int c, const Offer& o, const OfferMetrics& m) {
-    switch (c) {
-        case ColId: return static_cast<double>(o.id);
-        case ColMachine: return o.machineId ? std::optional<double>(static_cast<double>(*o.machineId)) : std::nullopt;
-        case ColHost: return o.hostId ? std::optional<double>(static_cast<double>(*o.hostId)) : std::nullopt;
-        case ColNum: return static_cast<double>(o.numGpus);
-        case ColVram: return o.gpuRamGb();
-        case ColTotalVram: return o.totalVramGb();
-        case ColTflops: return o.totalFlops;
-        case ColDlperf: return o.dlperf;
-        case ColPrice: return o.priceHr;
-        case ColDlpPerDollar: return m.dlpPerDollar;
-        case ColTflopsPerDollar: return m.tflopsPerDollar;
-        case ColReliability: return o.reliability;
-        case ColDuration: return o.durationSec;
-        case ColInetUp: return o.inetUp;
-        case ColInetDown: return o.inetDown;
-        case ColDiskBw: return o.diskBw;
-        case ColDisk: return o.diskSpace;
-        case ColCores: return o.cpuCoresEffective;
-        case ColRam: return o.cpuRamGb();
-        case ColPcie: return o.pcieBw;
-        case ColCuda: return o.cudaMaxGood;
-        case ColPorts: return o.directPortCount;
-        default: return std::nullopt;
-    }
-}
-
-std::string textCell(int c, const Offer& o, const OfferMetrics& m, const CurrencyFormat& cur) {
-    switch (c) {
-        case ColId: return std::to_string(o.id);
-        case ColMachine: return o.machineId ? std::to_string(*o.machineId) : kMissing;
-        case ColHost: return o.hostId ? std::to_string(*o.hostId) : kMissing;
-        case ColGpu: return o.gpuName;
-        case ColNum: return std::to_string(o.numGpus);
-        case ColVram: return formatMetric(o.gpuRamGb(), 0);
-        case ColTotalVram: return formatMetric(o.totalVramGb(), 0);
-        case ColTflops: return formatMetric(o.totalFlops, 1);
-        case ColDlperf: return formatMetric(o.dlperf, 1);
-        case ColPrice: return fmt::money(o.priceHr, cur);
-        case ColDlpPerDollar: return formatMetric(m.dlpPerDollar, 1);
-        case ColTflopsPerDollar: return formatMetric(m.tflopsPerDollar, 1);
-        case ColReliability: return fmt::percent(o.reliability, 2);
-        case ColDuration: return o.durationSec ? fmt::humanDuration(*o.durationSec) : std::string(kMissing);
-        case ColInetUp: return formatMetric(o.inetUp, 0);
-        case ColInetDown: return formatMetric(o.inetDown, 0);
-        case ColDiskBw: return formatMetric(o.diskBw, 0);
-        case ColDisk: return formatMetric(o.diskSpace, 0);
-        case ColCpu: return o.cpuName;
-        case ColCores: return formatMetric(o.cpuCoresEffective, 1);
-        case ColRam: return formatMetric(o.cpuRamGb(), 0);
-        case ColPcie: return std::format("{} x{}", formatMetric(o.pciGen, 1), formatMetric(o.gpuLanes, 0));
-        case ColCuda: return formatMetric(o.cudaMaxGood, 1);
-        case ColLocation: return o.geolocation;
-        case ColVerification: return o.verification;
-        case ColPorts: return formatMetric(o.directPortCount, 0);
-        default: return {};
-    }
-}
-
 }  // namespace
 
 void SearchView::init(App& app) {
     Settings& s = app.settings();
-    if (s.offerColumns.size() != ColCount) {
-        s.offerColumns.assign(ColCount, true);
-        for (int c = 0; c < ColCount; ++c) s.offerColumns[static_cast<std::size_t>(c)] = !kOfferColumns[c].defaultHidden;
-    }
+    const std::vector<bool> defaults = ui::OfferTable::defaultColumns();
+    if (s.offerColumns.size() != defaults.size()) s.offerColumns = defaults;
+    table_.setSort(s.filters.sortKey, s.filters.sortDesc);
     search(app);
 }
 
@@ -177,7 +69,7 @@ void SearchView::preselectVolume(App& app, std::int64_t volumeId) {
 
 void SearchView::filtersChanged(App& app, bool immediate) {
     app.markSettingsDirty();
-    syncTableSort_ = true;
+    table_.setSort(app.settings().filters.sortKey, app.settings().filters.sortDesc);
     if (immediate) {
         search(app);
     } else {
@@ -283,7 +175,7 @@ void SearchView::recompute(App& app) {
     hiddenIncompatible_ = 0;
     hiddenRented_ = 0;
     hiddenNonFavorite_ = 0;
-    tableRowsDirty_ = true;
+    table_.invalidate();
     for (std::size_t idx : order) {
         if (!passesVerificationFilter(offers_[idx], f)) {
             ++hiddenDeverified_;
@@ -1211,165 +1103,35 @@ void SearchView::drawCards(App& app) {
 
 void SearchView::drawTable(App& app) {
     Settings& st = app.settings();
-    const ImGuiTableFlags flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable |
-                                  ImGuiTableFlags_Sortable | ImGuiTableFlags_SortTristate | ImGuiTableFlags_RowBg | ImGuiTableFlags_PadOuterX |
-                                  ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY |
-                                  ImGuiTableFlags_SizingFixedFit;
-    if (!ImGui::BeginTable("##offertable", ColCount, flags)) return;
-    ImGui::TableSetupScrollFreeze(2, 1);
-    for (int c = 0; c < ColCount; ++c) {
-        ImGuiTableColumnFlags cf = ImGuiTableColumnFlags_WidthFixed;
-        if (kOfferColumns[c].defaultHidden) cf |= ImGuiTableColumnFlags_DefaultHide;
-        if (c == ColRent) cf |= ImGuiTableColumnFlags_NoSort | ImGuiTableColumnFlags_NoHide;
-        ImGui::TableSetupColumn(kOfferColumns[c].name, cf, kOfferColumns[c].width * uiScale(app));
+    ui::OfferTableConfig cfg;
+    cfg.currency = &st.currency;
+    cfg.diskGb = st.filters.effectiveDiskGb();
+    cfg.rentNow = st.filters.rentalType == RentalType::OnDemand;
+    cfg.scale = uiScale(app);
+    bool columnsChanged = false;
+    cfg.columns = &st.offerColumns;
+    cfg.columnsChanged = &columnsChanged;
+    cfg.rowInfo = [&](std::size_t idx) {
+        const Offer& o = offers_[idx];
+        ui::OfferRowInfo info;
+        info.rentedByMe = (o.machineId && rentedMachines_.contains(*o.machineId)) || rentedOffers_.contains(o.id);
+        info.favorite = o.machineId && st.favoriteMachines.contains(*o.machineId);
+        info.renting = rentingOffers_.contains(o.id);
+        if (isIncompatible(o, st.filters)) info.incompatibleWhy = incompatibleReason(o, st.filters);
+        return info;
+    };
+    const ui::OfferTableResult r = table_.draw("##offertable", offers_, metrics_, defects_, visible_, cfg);
+    if (columnsChanged) app.markSettingsDirty();
+    // Header clicks on columns that have a server-side equivalent drive the search sort too.
+    if (r.sortKey && (st.filters.sortKey != *r.sortKey || st.filters.sortDesc != r.sortDesc)) {
+        st.filters.sortKey = *r.sortKey;
+        st.filters.sortDesc = r.sortDesc;
+        recompute(app);
+        filtersChanged(app);
     }
-    ImGui::TableHeadersRow();
-
-    if (!tableColumnsApplied_ && st.offerColumns.size() == ColCount) {
-        for (int c = 0; c < ColCount; ++c) ImGui::TableSetColumnEnabled(c, st.offerColumns[static_cast<std::size_t>(c)]);
-        tableColumnsApplied_ = true;
-    } else {
-        for (int c = 0; c < ColCount; ++c) {
-            const bool en = (ImGui::TableGetColumnFlags(c) & ImGuiTableColumnFlags_IsEnabled) != 0;
-            if (static_cast<std::size_t>(c) < st.offerColumns.size() && st.offerColumns[static_cast<std::size_t>(c)] != en) {
-                st.offerColumns[static_cast<std::size_t>(c)] = en;
-                app.markSettingsDirty();
-            }
-        }
-    }
-
-    if (syncTableSort_) {
-        syncTableSort_ = false;
-        const auto col = sortColumnFor(st.filters.sortKey);
-        if (col) {
-            ImGui::TableSetColumnSortDirection(*col, st.filters.sortDesc ? ImGuiSortDirection_Descending : ImGuiSortDirection_Ascending, false);
-        } else if (ImGuiTableSortSpecs* specs = ImGui::TableGetSortSpecs(); specs && specs->SpecsCount > 0) {
-            ImGui::TableSetColumnSortDirection(specs->Specs[0].ColumnIndex, ImGuiSortDirection_None, false);
-        }
-    }
-    int sortCol = -1;
-    bool sortDesc = false;
-    if (ImGuiTableSortSpecs* specs = ImGui::TableGetSortSpecs(); specs && specs->SpecsCount > 0) {
-        const int c = specs->Specs[0].ColumnIndex;
-        const bool desc = specs->Specs[0].SortDirection == ImGuiSortDirection_Descending;
-        sortCol = c;
-        sortDesc = desc;
-        // Header clicks on columns that have a server-side equivalent drive the search sort too.
-        if (specs->SpecsDirty) {
-            specs->SpecsDirty = false;
-            const std::optional<SortKey> key = sortKeyForColumn(c);
-            if (key && (st.filters.sortKey != *key || st.filters.sortDesc != desc)) {
-                st.filters.sortKey = *key;
-                st.filters.sortDesc = desc;
-                recompute(app);
-                filtersChanged(app);
-            }
-        }
-    }
-    // Sorting ~1000+ rows is only redone when the results or the sort column change, not every frame.
-    if (tableRowsDirty_ || sortCol != tableSortCol_ || sortDesc != tableSortDesc_) {
-        tableRows_ = visible_;
-        if (sortCol >= 0) {
-            const int c = sortCol;
-            const bool desc = sortDesc;
-            std::stable_sort(tableRows_.begin(), tableRows_.end(), [&](std::size_t a, std::size_t b) {
-                const auto na = numericCell(c, offers_[a], metrics_[a]);
-                const auto nb = numericCell(c, offers_[b], metrics_[b]);
-                if (na || nb) {
-                    if (!na || !nb) return na.has_value();
-                    return desc ? *na > *nb : *na < *nb;
-                }
-                const auto sa = textCell(c, offers_[a], metrics_[a], st.currency);
-                const auto sb = textCell(c, offers_[b], metrics_[b], st.currency);
-                return desc ? sa > sb : sa < sb;
-            });
-        }
-        tableRowsDirty_ = false;
-        tableSortCol_ = sortCol;
-        tableSortDesc_ = sortDesc;
-    }
-    const std::vector<std::size_t>& rows = tableRows_;
-
-    std::optional<std::pair<ui::OfferAction, std::size_t>> pending;
-    const bool rentNow = st.filters.rentalType == RentalType::OnDemand;
-    ImGuiListClipper clipper;
-    clipper.Begin(static_cast<int>(rows.size()));
-    while (clipper.Step()) {
-        for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
-            const std::size_t idx = rows[static_cast<std::size_t>(i)];
-            const Offer& o = offers_[idx];
-            const OfferMetrics& m = metrics_[idx];
-            const bool defective = defects_[idx].defective();
-            const bool incompatible = isIncompatible(o, st.filters);
-            const bool rentedByMe = (o.machineId && rentedMachines_.contains(*o.machineId)) || rentedOffers_.contains(o.id);
-            const bool favorite = o.machineId && st.favoriteMachines.contains(*o.machineId);
-            ImGui::TableNextRow();
-            ImGui::PushID(static_cast<int>(idx));
-            if (rentedByMe) ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ui::col(ui::palette().info, 0.10f));
-            for (int c = 0; c < ColCount; ++c) {
-                if (!ImGui::TableSetColumnIndex(c)) continue;
-                if (c == ColId) {
-                    // Favorite machines: gold ID with a star.
-                    if (favorite) ImGui::PushStyleColor(ImGuiCol_Text, ui::palette().caution);
-                    ui::TableRowSelectable(favorite ? (ICON_FA_STAR " " + textCell(c, o, m, st.currency)).c_str()
-                                                    : textCell(c, o, m, st.currency).c_str(),
-                                           false);
-                    if (favorite) ImGui::PopStyleColor();
-                    if (ImGui::BeginPopupContextItem("##rowctx")) {
-                        if (auto a = ui::OfferContextMenuItems(o, !rentedByMe, favorite); a != ui::OfferAction::None) pending = std::pair{a, idx};
-                        ImGui::EndPopup();
-                    }
-                } else if (c == ColRent) {
-                    if (rentedByMe) {
-                        ImGui::BeginDisabled();
-                        ImGui::PushStyleColor(ImGuiCol_Text, ui::palette().info);
-                        ImGui::SmallButton("RENTED");
-                        ImGui::PopStyleColor();
-                        ImGui::EndDisabled();
-                    } else if (rentingOffers_.contains(o.id)) {
-                        ui::SpinnerText("##renting", "renting");
-                    } else if (ImGui::SmallButton("RENT")) {
-                        pending = std::pair{rentNow ? ui::OfferAction::RentNow : ui::OfferAction::Rent, idx};
-                    }
-                } else if (c == ColTflopsPerDollar && m.rankTflopsPerDollar) {
-                    ui::TextWithColor(ui::rankColor(*m.rankTflopsPerDollar), textCell(c, o, m, st.currency).c_str());
-                } else if (c == ColDlpPerDollar && m.rankDlpPerDollar) {
-                    ui::TextWithColor(ui::rankColor(*m.rankDlpPerDollar), textCell(c, o, m, st.currency).c_str());
-                } else if (c == ColVerification) {
-                    ui::TextWithColor(ui::verificationColor(o.verification), o.verification.c_str());
-                    if (defective) {
-                        ImGui::SameLine();
-                        ui::TextWithColor(ui::palette().danger, "defective");
-                        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", fmt::join(defects_[idx].reasons, "\n").c_str());
-                    }
-                    if (defects_[idx].blacklisted()) {
-                        ImGui::SameLine();
-                        ui::TextWithColor(ui::palette().textDim, "blacklisted");
-                        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", fmt::join(defects_[idx].blacklistReasons, "\n").c_str());
-                    }
-                } else if (c == ColPrice) {
-                    ImGui::TextUnformatted(textCell(c, o, m, st.currency).c_str());
-                    if (ImGui::IsItemHovered()) ui::OfferPriceTooltip(o, st.currency, st.filters.effectiveDiskGb());
-                } else if (c == ColGpu && incompatible) {
-                    ui::TextWithColor(ui::palette().danger, textCell(c, o, m, st.currency).c_str());
-                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Incompatible with the template:\n%s", incompatibleReason(o, st.filters).c_str());
-                } else if (c == ColCuda && incompatible && incompatibleReason(o, st.filters).find("cuda_max_good") != std::string::npos) {
-                    ui::TextWithColor(ui::palette().danger, textCell(c, o, m, st.currency).c_str());
-                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", incompatibleReason(o, st.filters).c_str());
-                } else {
-                    ImGui::TextUnformatted(textCell(c, o, m, st.currency).c_str());
-                }
-                if (c == ColGpu && defective && !incompatible && ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("%s", fmt::join(defects_[idx].reasons, "\n").c_str());
-                }
-            }
-            ImGui::PopID();
-        }
-    }
-    ImGui::EndTable();
-    if (pending) {
-        const Offer o = offers_[pending->second];
-        handleAction(app, pending->first, o);
+    if (r.action != ui::OfferAction::None) {
+        const Offer o = offers_[r.index];
+        handleAction(app, r.action, o);
     }
 }
 

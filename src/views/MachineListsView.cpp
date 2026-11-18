@@ -69,6 +69,45 @@ bool isSubset(const std::set<std::int64_t>& a, const std::set<std::int64_t>& b) 
     return std::includes(b.begin(), b.end(), a.begin(), a.end());
 }
 
+std::set<std::int64_t> rentedMachines(App& app) {
+    std::set<std::int64_t> out;
+    for (const auto& inst : app.instances()) {
+        if (inst.machineId) out.insert(*inst.machineId);
+    }
+    return out;
+}
+
+// Search's offer table for one list; the lists share their column choice (Settings::machineListColumns).
+ui::OfferTableResult listTable(App& app, ui::OfferTable& table, const char* id, const std::vector<Offer>& offers,
+                               const std::vector<OfferMetrics>& metrics, const std::vector<DefectInfo>& defects,
+                               const std::vector<std::size_t>& rows, const char* actionLabel,
+                               const std::set<std::int64_t>& rented) {
+    Settings& s = app.settings();
+    if (s.machineListColumns.size() != ui::OfferTable::defaultColumns().size()) {
+        s.machineListColumns = ui::OfferTable::defaultColumns();
+    }
+    ui::OfferTableConfig cfg;
+    cfg.currency = &s.currency;
+    cfg.diskGb = s.filters.effectiveDiskGb();
+    cfg.actionLabel = actionLabel;
+    cfg.scale = app.dpiScale() * s.uiScale;
+    // As high as its rows, but scrolling inside the page's remaining space when there are many.
+    const float minH = ui::OfferTable::heightForRows(std::min<std::size_t>(rows.size(), 5));
+    cfg.height = std::min(ui::OfferTable::heightForRows(rows.size()), std::max(minH, ImGui::GetContentRegionAvail().y));
+    bool columnsChanged = false;
+    cfg.columns = &s.machineListColumns;
+    cfg.columnsChanged = &columnsChanged;
+    cfg.rowInfo = [&](std::size_t idx) {
+        const Offer& o = offers[idx];
+        ui::OfferRowInfo info;
+        info.rentedByMe = o.machineId && rented.contains(*o.machineId);
+        info.favorite = o.machineId && s.favoriteMachines.contains(*o.machineId);
+        return info;
+    };
+    const ui::OfferTableResult r = table.draw(id, offers, metrics, defects, rows, cfg);
+    if (columnsChanged) app.markSettingsDirty();
+    return r;
+}
 }  // namespace
 
 void MachineListsView::fetch(App& app) {
@@ -87,6 +126,8 @@ void MachineListsView::fetch(App& app) {
             if (!r.ok) return;
             machineOffers_ = parseOffers(r.data);
             machineMetrics_ = computeMetrics(machineOffers_);
+            favTable_.invalidate();
+            blTable_.invalidate();
         });
     } else {
         machineOffers_.clear();
@@ -101,6 +142,7 @@ void MachineListsView::fetch(App& app) {
             if (!r.ok) return;
             hostOffers_ = parseOffers(r.data);
             hostMetrics_ = computeMetrics(hostOffers_);
+            hostTable_.invalidate();
         });
     } else {
         hostOffers_.clear();
@@ -128,6 +170,19 @@ void MachineListsView::draw(App& app) {
                                s.blacklist.machines.size(), s.blacklist.hosts.size())
                        .c_str());
     if (ui::BusyButton(ICON_FA_ARROWS_ROTATE, "Refresh", busy)) fetch(app);
+    ImGui::SameLine();
+    {
+        const ImVec4 on = ui::palette().accent;
+        if (ui::IconButton(ICON_FA_GRIP, "Card view", s.machineListCardView ? &on : nullptr)) {
+            s.machineListCardView = true;
+            app.markSettingsDirty();
+        }
+        ImGui::SameLine(0, 0);
+        if (ui::IconButton(ICON_FA_TABLE_LIST, "Table view", !s.machineListCardView ? &on : nullptr)) {
+            s.machineListCardView = false;
+            app.markSettingsDirty();
+        }
+    }
     ImGui::SameLine();
     ImGui::AlignTextToFramePadding();
     ui::TextDim(std::format("Current on-demand offers of these machines, priced for {:.0f} GB disk like Search. "
@@ -176,41 +231,50 @@ void MachineListsView::drawMachines(App& app, const std::set<std::int64_t>& idsR
     const std::set<std::int64_t> ids = idsRef;  // the lists change when a button is clicked
     const auto best = bestPerMachine(machineOffers_);
     const auto defects = evaluateDefects(machineOffers_, s.defects, s.blacklist);
-    std::set<std::int64_t> rented;
-    for (const auto& inst : app.instances()) {
-        if (inst.machineId) rented.insert(*inst.machineId);
-    }
+    const std::set<std::int64_t> rented = rentedMachines(app);
 
-    ui::OfferCardContext ctx;
-    ctx.currency = &s.currency;
-    ctx.diskGb = s.filters.effectiveDiskGb();
-    ctx.actionLabel = ICON_FA_XMARK "  REMOVE";
-    float measured = 0.0f;
-    ctx.measuredHeight = &measured;
-    ctx.height = cardHeight_ > 0.0f ? cardHeight_ : ui::OfferCardHeight();
-
-    std::optional<std::int64_t> remove;
-    std::optional<std::pair<ui::OfferAction, Offer>> pending;
+    std::vector<std::size_t> rows;  // offer index per listed machine, in ID order
     std::vector<std::int64_t> noOffer;
     std::vector<std::int64_t> waiting;
     for (const auto id : ids) {
-        const auto it = best.find(id);
-        if (it == best.end()) {
+        if (const auto it = best.find(id); it != best.end()) {
+            rows.push_back(it->second);
+        } else {
             const bool known = machinesRes_.loaded && !machinesRes_.loading && fetchedMachines_.contains(id);
             (known ? noOffer : waiting).push_back(id);
-            continue;
         }
-        const Offer& o = machineOffers_[it->second];
-        ctx.rentedByMe = rented.contains(id);
-        ctx.favorite = s.favoriteMachines.contains(id);
-        const auto a = ui::OfferCard(o, machineMetrics_[it->second], defects[it->second], ctx);
+    }
+
+    std::optional<std::int64_t> remove;
+    std::optional<std::pair<ui::OfferAction, Offer>> pending;
+    auto handle = [&](ui::OfferAction a, std::size_t idx) {
+        const Offer& o = machineOffers_[idx];
         if (a == ui::OfferAction::ListAction) {
-            remove = id;
+            if (o.machineId) remove = *o.machineId;
         } else if (a != ui::OfferAction::None) {
             pending = std::pair{a, o};
         }
+    };
+    if (s.machineListCardView) {
+        ui::OfferCardContext ctx;
+        ctx.currency = &s.currency;
+        ctx.diskGb = s.filters.effectiveDiskGb();
+        ctx.actionLabel = ICON_FA_XMARK "  REMOVE";
+        float measured = 0.0f;
+        ctx.measuredHeight = &measured;
+        ctx.height = cardHeight_ > 0.0f ? cardHeight_ : ui::OfferCardHeight();
+        for (const std::size_t idx : rows) {
+            const Offer& o = machineOffers_[idx];
+            ctx.rentedByMe = o.machineId && rented.contains(*o.machineId);
+            ctx.favorite = o.machineId && s.favoriteMachines.contains(*o.machineId);
+            handle(ui::OfferCard(o, machineMetrics_[idx], defects[idx], ctx), idx);
+        }
+        if (measured > 0.0f) cardHeight_ = std::ceil(measured);
+    } else if (!rows.empty()) {
+        const ui::OfferTableResult r = listTable(app, favorites ? favTable_ : blTable_, favorites ? "##favtable" : "##bltable",
+                                                 machineOffers_, machineMetrics_, defects, rows, "REMOVE", rented);
+        handle(r.action, r.index);
     }
-    if (measured > 0.0f) cardHeight_ = std::ceil(measured);
 
     if (!waiting.empty()) ui::SpinnerText(favorites ? "##favwait" : "##blwait", "loading offers...");
     if (!noOffer.empty()) {
@@ -248,6 +312,8 @@ void MachineListsView::drawHosts(App& app) {
     const std::set<std::int64_t> hosts = s.blacklist.hosts;
     const auto best = bestPerMachine(hostOffers_);
     const auto defects = evaluateDefects(hostOffers_, s.defects, s.blacklist);
+    const std::set<std::int64_t> rented = rentedMachines(app);
+    const bool cards = s.machineListCardView;
 
     ui::OfferCardContext ctx;
     ctx.currency = &s.currency;
@@ -259,31 +325,46 @@ void MachineListsView::drawHosts(App& app) {
 
     std::optional<std::int64_t> remove;
     std::optional<std::pair<ui::OfferAction, Offer>> pending;
+    std::vector<std::size_t> tableRows;  // table view: the machines of all hosts in one table
     for (const auto host : hosts) {
         ImGui::PushID(static_cast<int>(host));
-        std::vector<std::size_t> cards;
+        std::vector<std::size_t> machines;
         for (const auto& [machine, idx] : best) {
-            if (hostOffers_[idx].hostId == host) cards.push_back(idx);
+            if (hostOffers_[idx].hostId == host) machines.push_back(idx);
         }
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted(std::format(ICON_FA_USER "  Host {}", host).c_str());
         ImGui::SameLine();
         const bool known = hostsRes_.loaded && !hostsRes_.loading && fetchedHosts_.contains(host);
         ui::TextDim(!known ? "loading..."
-                    : cards.empty()
+                    : machines.empty()
                         ? "no machine listed right now"
-                        : std::format("{} machine{} listed", cards.size(), cards.size() == 1 ? "" : "s").c_str());
+                        : std::format("{} machine{} listed", machines.size(), machines.size() == 1 ? "" : "s").c_str());
         ImGui::SameLine();
         if (ui::SecondaryButton(ICON_FA_XMARK "  Remove host")) remove = host;
-        for (const std::size_t idx : cards) {
-            const Offer& o = hostOffers_[idx];
-            ctx.favorite = o.machineId && s.favoriteMachines.contains(*o.machineId);
-            const auto a = ui::OfferCard(o, hostMetrics_[idx], defects[idx], ctx);
-            if (a != ui::OfferAction::None && a != ui::OfferAction::ListAction) pending = std::pair{a, o};
+        if (cards) {
+            for (const std::size_t idx : machines) {
+                const Offer& o = hostOffers_[idx];
+                ctx.rentedByMe = o.machineId && rented.contains(*o.machineId);
+                ctx.favorite = o.machineId && s.favoriteMachines.contains(*o.machineId);
+                const auto a = ui::OfferCard(o, hostMetrics_[idx], defects[idx], ctx);
+                if (a != ui::OfferAction::None && a != ui::OfferAction::ListAction) pending = std::pair{a, o};
+            }
+        } else {
+            tableRows.insert(tableRows.end(), machines.begin(), machines.end());
         }
         ImGui::PopID();
     }
     if (measured > 0.0f) cardHeight_ = std::max(cardHeight_, std::ceil(measured));
+    if (!cards && !tableRows.empty()) {
+        const ui::OfferTableResult r =
+            listTable(app, hostTable_, "##hosttable", hostOffers_, hostMetrics_, defects, tableRows, "REMOVE HOST", rented);
+        if (r.action == ui::OfferAction::ListAction) {
+            remove = hostOffers_[r.index].hostId;
+        } else if (r.action != ui::OfferAction::None) {
+            pending = std::pair{r.action, hostOffers_[r.index]};
+        }
+    }
 
     if (remove) {
         s.blacklist.hosts.erase(*remove);

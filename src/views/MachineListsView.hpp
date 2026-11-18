@@ -6,6 +6,7 @@
 #include "logic/Metrics.hpp"
 #include "model/Offer.hpp"
 #include "views/Resource.hpp"
+#include "widgets/OfferTable.hpp"
 
 #include <cstdint>
 #include <set>
@@ -35,6 +36,9 @@ private:
     std::set<std::int64_t> fetchedHosts_;
     int lastFrame_ = -10;
     float cardHeight_ = 0.0f;
+    ui::OfferTable favTable_;
+    ui::OfferTable blTable_;
+    ui::OfferTable hostTable_;
 };
 
 }  // namespace vast

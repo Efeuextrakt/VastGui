@@ -73,10 +73,12 @@ struct Settings {
     std::string templateSort = "name";  // template cards: "name" or "date"
     bool templateSortDesc = false;
     bool instanceCardView = true;
+    bool machineListCardView = true;  // Favorites & Blacklist page: cards or table
     std::string instanceSort = "label";  // instance cards: label, id, status, gpu, price, uptime
     bool instanceSortDesc = false;
     std::vector<bool> offerColumns;
     std::vector<bool> instanceColumns;
+    std::vector<bool> machineListColumns;  // Favorites & Blacklist tables
 
     // Misc UI state
     bool sidebarCollapsed = false;

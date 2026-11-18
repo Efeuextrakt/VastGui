@@ -76,10 +76,12 @@ void to_json(json& j, const Settings& s) {
     j["template_sort"] = s.templateSort;
     j["template_sort_desc"] = s.templateSortDesc;
     j["instance_card_view"] = s.instanceCardView;
+    j["machine_list_card_view"] = s.machineListCardView;
     j["instance_sort"] = s.instanceSort;
     j["instance_sort_desc"] = s.instanceSortDesc;
     j["offer_columns"] = boolsToJson(s.offerColumns);
     j["instance_columns"] = boolsToJson(s.instanceColumns);
+    j["machine_list_columns"] = boolsToJson(s.machineListColumns);
     j["sidebar_collapsed"] = s.sidebarCollapsed;
     j["show_activity_log"] = s.showActivityLog;
     j["gpu_models"] = s.gpuModels;
@@ -200,10 +202,12 @@ void readSettings(const json& j, Settings& s, std::vector<std::string>* problems
     s.templateSort = oneOf("template_sort", {"name", "date"}, "name");
     s.templateSortDesc = optBool(j, "template_sort_desc").value_or(false);
     s.instanceCardView = optBool(j, "instance_card_view").value_or(true);
+    s.machineListCardView = optBool(j, "machine_list_card_view").value_or(true);
     s.instanceSort = oneOf("instance_sort", {"label", "id", "status", "gpu", "price", "uptime"}, "label");
     s.instanceSortDesc = optBool(j, "instance_sort_desc").value_or(false);
     s.offerColumns = boolsFromJson(j, "offer_columns");
     s.instanceColumns = boolsFromJson(j, "instance_columns");
+    s.machineListColumns = boolsFromJson(j, "machine_list_columns");
     s.sidebarCollapsed = optBool(j, "sidebar_collapsed").value_or(false);
     s.showActivityLog = optBool(j, "show_activity_log").value_or(true);
     if (const json* g = find(j, "gpu_models"); g && g->is_array()) {
