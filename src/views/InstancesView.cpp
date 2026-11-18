@@ -133,15 +133,21 @@ void drawCostTooltip(const Instance& i, const CurrencyFormat& c) {
         ImGui::SameLine(ImGui::GetFontSize() * 10.0f);
         ImGui::TextUnformatted(v.c_str());
     };
-    const bool running = i.status() == "running";
-    if (i.costGpuHr) row(running ? "GPU" : "GPU (not billed)", fmt::money(*i.costGpuHr, c, 4) + "/hr");
-    if (i.costDiskHr) row("Storage", fmt::money(*i.costDiskHr, c, 4) + "/hr");
+    const bool offline = i.actualStatus == "offline";
+    if (i.costGpuHr) row(i.gpuBilled ? "GPU" : "GPU (not billed)", fmt::money(*i.costGpuHr, c, 4) + "/hr");
+    if (i.costDiskHr) row(i.storageBilled ? "Storage" : "Storage (not billed)", fmt::money(*i.costDiskHr, c, 4) + "/hr");
     if (i.costListHr && i.costNowHr && *i.costListHr - *i.costNowHr > 1e-6) {
         row("Reserved discount", "-" + fmt::money(*i.costListHr - *i.costNowHr, c, 4) + "/hr");
     }
     ImGui::Separator();
     row("Total", fmt::money(i.costNowHr, c, 4) + "/hr");
-    if (!running) ui::TextDim("Not running: only the storage is billed.");
+    if (offline) {
+        ui::TextWithColor(ui::palette().warning, "Offline: vast.ai bills neither GPU nor storage until the machine is back.");
+    } else if (!i.gpuBilled && i.costNowHr) {
+        ui::TextDim("GPU not billed now: only the storage is billed.");
+    } else if (!i.costNowHr) {
+        ui::TextDim("vast.ai sent no price for this state.");
+    }
     if (i.prepaid()) {
         const double hours = i.costNowHr && *i.costNowHr > 0 ? *i.creditBalance / *i.costNowHr : 0.0;
         ui::TextWithColor(ui::palette().success,
@@ -475,7 +481,8 @@ void InstancesView::drawToolbar(App& app) {
                                prepaidText)
                        .c_str());
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s/hr is billed to your account now (storage of stopped instances included).%s",
+        ImGui::SetTooltip("%s/hr is billed to your account now (storage of stopped instances included; offline "
+                          "instances are not billed).%s",
                           fmt::money(cost.rate, cur).c_str(),
                           cost.prepaidCount > 0 ? "\nPrepaid (reserved) instances are paid from their own prepaid credit and are "
                                                   "not included; when it runs out they are billed at the normal price."

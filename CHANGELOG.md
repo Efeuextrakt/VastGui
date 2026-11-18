@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Instances
+- Fixed: offline instances were shown at the full price (GPU + storage). vast.ai bills neither GPU nor storage
+  while the machine is offline, so they now cost $0/hr - in the *$/hr* column, the header total, the $/hr trend
+  and the Billing page's "credit runs out" estimate.
+- Fixed: the cost tooltip called the GPU "not billed" for every state except *running* (also when vast.ai's price
+  included it, e.g. while loading). GPU and storage are now marked *not billed* exactly when they are not part of
+  the total; offline instances say so.
+- Fixed: without vast.ai's price data, a stopped instance without a storage price showed the full running price;
+  it now shows a dash.
+
 ## 1.4.4 - 2026-11-15
 
 ### Instances

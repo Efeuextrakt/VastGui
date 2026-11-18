@@ -47,11 +47,14 @@ struct Instance {
     std::optional<std::int64_t> machineId;
     std::optional<std::int64_t> hostId;
     std::optional<double> dphTotal;
-    // Actual current cost from the `instance` price object (discounts applied, GPU part 0 while stopped).
+    // Actual current cost from the `instance` price object (discounts applied, GPU part 0 while stopped, nothing
+    // while offline). costGpuHr / costDiskHr are shown for reference even when not billed (see the flags).
     std::optional<double> costNowHr;
     std::optional<double> costGpuHr;
     std::optional<double> costDiskHr;
     std::optional<double> costListHr;  // the same without discounts
+    bool gpuBilled = false;      // costNowHr includes the GPU
+    bool storageBilled = false;  // costNowHr includes the storage (not while the machine is offline)
     std::optional<double> totalFlops;
     std::optional<double> dlperf;
     std::optional<double> creditDiscountMax;  // host's max reserved discount (0..1)
@@ -318,9 +321,11 @@ inline void from_json(const json& j, Instance& o) {
     o.isBid = optBool(j, "is_bid").value_or(false);
     if (const json* p = find(j, "ports"); p && p->is_object()) o.ports = *p;
     // Port of the vast.ai console's instance price (m_() in its PricingBadges module): the `instance` price object,
-    // +5 % on the GPU for a running bid that is not outbid, GPU + disk for offline machines, and the reserved
-    // (discounted) price only while prepaid credit is left on the instance.
+    // +5 % on the GPU for a running bid that is not outbid, and the reserved (discounted) price only while prepaid
+    // credit is left on the instance. Unlike the console (which shows GPU + disk), an offline machine costs nothing:
+    // vast.ai bills neither the GPU nor the storage while it is offline (docs.vast.ai, Billing FAQ).
     const bool reserved = o.creditBalance.value_or(0.0) > 0.0 && o.creditDiscount.value_or(0.0) > 0.0;
+    const bool offline = o.actualStatus == "offline";
     if (const json* c = find(j, "instance"); c && c->is_object() && optDouble(*c, "totalHour")) {
         double gpu = optDouble(*c, "gpuCostPerHour").value_or(0.0);
         const double disk = optDouble(*c, "diskHour").value_or(0.0);
@@ -337,15 +342,18 @@ inline void from_json(const json& j, Instance& o) {
         }
         total += sla;
         discounted += sla;
-        if (o.actualStatus != "running") {
-            // Not billed while stopped; shown for reference only.
+        // vast.ai's price object includes the GPU whenever it is billed (running; loading / creating as vast.ai
+        // reports it). Otherwise the GPU line shows the machine's price for reference.
+        o.gpuBilled = !offline && gpu > 0.0;
+        o.storageBilled = !offline;
+        if (!o.gpuBilled) {
             if (const json* s = find(j, "search"); s && s->is_object()) {
                 if (auto g = optDouble(*s, "gpuCostPerHour")) gpu = *g * (bidMarkup ? 1.05 : 1.0);
             }
         }
-        if (o.actualStatus == "offline") {
-            total = gpu + disk;
-            discounted = gpu * (1.0 - o.creditDiscount.value_or(0.0)) + disk;
+        if (offline) {
+            total = 0.0;
+            discounted = 0.0;
         }
         o.costGpuHr = gpu;
         o.costDiskHr = disk;
@@ -354,17 +362,22 @@ inline void from_json(const json& j, Instance& o) {
     } else {
         // Older API responses: storage only unless running; discounted_dph_total includes the reserved discount.
         const std::optional<double> storage = optDouble(j, "storage_total_cost");
-        if (o.actualStatus == "running") {
+        o.costDiskHr = storage;
+        if (offline) {
+            o.costNowHr = 0.0;
+            o.costListHr = 0.0;
+        } else if (o.actualStatus == "running") {
+            o.gpuBilled = true;
+            o.storageBilled = true;
             o.costListHr = o.dphTotal;
             o.costNowHr = reserved ? optDouble(j, "discounted_dph_total") : std::nullopt;
             if (!o.costNowHr) o.costNowHr = o.dphTotal;
         } else if (storage) {
+            o.storageBilled = true;
             o.costNowHr = storage;
             o.costListHr = storage;
-            o.costDiskHr = storage;
-        } else {
-            o.costNowHr = o.dphTotal;
         }
+        // Not running and no storage price: unknown (shown as a dash), not the full running price.
     }
     o.raw = j;
 }

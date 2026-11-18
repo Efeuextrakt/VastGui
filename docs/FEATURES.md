@@ -96,10 +96,12 @@ search to search because the server keeps sampling. Each request at limit 1000 d
   that opens *Change bid*; also a status filter and a count in the header), bulk start/stop/reboot/destroy, label.
 - **Real costs**: the *$/hr* column, the header total and the $/hr sparkline show what each instance costs right
   now, calculated like the vast.ai console from vast.ai's `instance` price: the normal price while running (a
-  running bid +5 % on the GPU), only storage while stopped, and the reserved (discounted) price only while
-  prepaid credit is left on the instance (`credit_balance > 0` and `credit_discount > 0`). The tooltip breaks it
-  down (GPU / storage / reserved discount) and shows the normal running price. TFLOPS/$/hr and DLP/$/hr use the
-  normal price.
+  running bid +5 % on the GPU), only storage while stopped, nothing while the machine is offline (vast.ai bills
+  neither GPU nor storage then), what vast.ai's price reports while loading / creating, and the reserved
+  (discounted) price only while prepaid credit is left on the instance (`credit_balance > 0` and
+  `credit_discount > 0`). The tooltip breaks it down (GPU / storage / reserved discount, each marked *not billed*
+  when it is not part of the total) and shows the normal running price. TFLOPS/$/hr and DLP/$/hr use the normal
+  price.
 - **Hourly total** in the header: what is billed to the account now. Prepaid (reserved) instances are paid from
   their own prepaid credit and are listed separately ("+ N prepaid: $x/hr").
 - **Machine details**: hover the instance ID or the GPU name (table and cards), or the machine line (cards), for the

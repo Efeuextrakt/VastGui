@@ -83,12 +83,34 @@ TEST_SUITE("Backend") {
         i = j.get<Instance>();
         CHECK(i.costNowHr.value() == doctest::Approx(0.05));
         CHECK(i.costGpuHr.value() == doctest::Approx(0.95));
+        CHECK_FALSE(i.gpuBilled);
+        CHECK(i.storageBilled);
+        // Offline: vast.ai bills neither GPU nor storage (the console shows GPU + disk here), also when reserved.
+        j = {{"id", 6}, {"actual_status", "offline"}, {"dph_total", 1.0}, {"credit_discount", 0.2}, {"credit_balance", 5.0},
+             {"search", {{"gpuCostPerHour", 0.95}}},
+             {"instance", {{"gpuCostPerHour", 0.95}, {"diskHour", 0.05}, {"totalHour", 1.0}, {"discountedTotalPerHour", 0.81}}}};
+        i = j.get<Instance>();
+        CHECK(i.costNowHr.value() == doctest::Approx(0.0));
+        CHECK(i.costListHr.value() == doctest::Approx(0.0));
+        CHECK(i.costGpuHr.value() == doctest::Approx(0.95));  // reference
+        CHECK_FALSE(i.gpuBilled);
+        CHECK_FALSE(i.storageBilled);
+        // Loading: whatever vast.ai's price object bills (here GPU + storage).
+        j = {{"id", 7}, {"actual_status", "loading"}, {"dph_total", 1.0},
+             {"instance", {{"gpuCostPerHour", 0.95}, {"diskHour", 0.05}, {"totalHour", 1.0}}}};
+        i = j.get<Instance>();
+        CHECK(i.costNowHr.value() == doctest::Approx(1.0));
+        CHECK(i.gpuBilled);
         // Without the price object: running uses discounted_dph_total when reserved, stopped only the storage.
         j = {{"id", 4}, {"actual_status", "running"}, {"dph_total", 1.0}, {"discounted_dph_total", 0.8},
              {"credit_discount", 0.2}, {"credit_balance", 5.0}};
         CHECK(j.get<Instance>().costNowHr.value() == doctest::Approx(0.8));
         j = {{"id", 5}, {"actual_status", "exited"}, {"dph_total", 1.0}, {"storage_total_cost", 0.05}};
         CHECK(j.get<Instance>().costNowHr.value() == doctest::Approx(0.05));
+        j["actual_status"] = "offline";
+        CHECK(j.get<Instance>().costNowHr.value() == doctest::Approx(0.0));
+        j = {{"id", 8}, {"actual_status", "exited"}, {"dph_total", 1.0}};  // no storage price: unknown, not dph_total
+        CHECK_FALSE(j.get<Instance>().costNowHr.has_value());
     }
 
     TEST_CASE("compact numbers") {
