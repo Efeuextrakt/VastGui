@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.4.5 - 2026-11-18
 
 ### Favorites & Blacklist page
 - New page (sidebar, below *Search*) with the favorite and blacklisted machines as Search cards: GPU, specs,
