@@ -2,11 +2,12 @@
 
 <img src="docs/images/icon.png" width="96" alt="VastGui icon">
 
-# VastGui
+# VastGui - desktop GUI client for vast.ai
 
-**A fast, native desktop app for renting and managing GPUs on [vast.ai](https://vast.ai).**
+**A fast, native desktop app for renting and managing cloud GPUs on [vast.ai](https://vast.ai).**
 
-Find the best GPU offers, rent them and keep an eye on your instances - without a browser, Python or the `vastai` CLI.
+Find the cheapest and best vast.ai GPU offers (RTX 4090, RTX 5090, A100, H100, ...), rent them and keep an eye on your
+Vast.ai instances - without a browser, Python or the `vastai` CLI. Free and open source.
 
 [![Latest release](https://img.shields.io/github/v/release/Efeuextrakt/VastGui?label=download&sort=semver)](https://github.com/Efeuextrakt/VastGui/releases/latest)
 [![CI](https://github.com/Efeuextrakt/VastGui/actions/workflows/ci.yml/badge.svg)](https://github.com/Efeuextrakt/VastGui/actions/workflows/ci.yml)
@@ -18,14 +19,14 @@ Find the best GPU offers, rent them and keep an eye on your instances - without 
 
 [Download](#download) · [Features](#highlights) · [Quick start](#quick-start) · [Docs](#documentation) · [Build from source](docs/BUILDING.md)
 
-<img src="docs/screenshots/search.png" alt="VastGui search page" width="100%">
+<img src="docs/screenshots/search.png" alt="VastGui - vast.ai GPU offer search with TFLOPS per dollar ranking" width="100%">
 
 </div>
 
 ## Why VastGui?
 
-The vast.ai web console is fine for a quick look. VastGui is for when you compare dozens of machines, care about
-price per performance and want to manage a fleet of instances from one window:
+The vast.ai web console is fine for a quick look. VastGui is a vast.ai GUI for when you compare dozens of machines,
+care about price per performance and want to manage a fleet of instances from one window:
 
 - **Better search results.** vast.ai returns a *random sample* of matching offers per request. VastGui sends several
   requests and merges them, so the truly best offers actually show up ([why](docs/FEATURES.md#search-completeness)).
