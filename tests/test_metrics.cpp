@@ -190,6 +190,49 @@ TEST_SUITE("Metrics") {
         CHECK(reservedPlanForAmount(1.0, 0.0, 720)->months == doctest::Approx(1.0));  // no discount: plain hours
     }
 
+    TEST_CASE("reserved offers are priced for the reserve period, like the server") {
+        // POST /bundles/ type=reserved with duration>=30 days (RTX A4000) and >=180 days (RTX 4070).
+        json j = {{"id", 1}, {"dph_total", 0.0856296}, {"credit_discount_max", 0.4}, {"storage_cost", 0.2},
+                  {"verification", "verified"},
+                  {"search", {{"gpuCostPerHour", 0.0826667}, {"diskHour", 0.0029630}, {"totalHour", 0.0856296},
+                              {"discountedTotalPerHour", 0.0856296}, {"slaPremiumPerHour", 0.0}}}};
+        Offer o = j.get<Offer>();
+        applyReservePeriod(o, 1.0);
+        CHECK(o.reserveDiscount == doctest::Approx(0.2));
+        CHECK(o.priceHr.value() == doctest::Approx(0.0690963).epsilon(1e-4));
+        applyReservePeriod(o, 3.0);  // re-pricing for another period starts from the list price
+        CHECK(o.priceHr.value() == doctest::Approx(0.0856296 - 0.0826667 * 0.3).epsilon(1e-4));
+
+        j["dph_total"] = 0.1407407;
+        j["credit_discount_max"] = 0.2;
+        j["search"]["gpuCostPerHour"] = 0.12;
+        Offer o6 = j.get<Offer>();
+        applyReservePeriod(o6, 6.0);
+        CHECK(o6.priceHr.value() == doctest::Approx(0.1201693).epsilon(1e-4));
+
+        // Prepay plan for the rental: GPU + storage for the dialog's disk size, for the offer's period.
+        const auto plan = offerReservePlan(o6, 36.0);
+        REQUIRE(plan.has_value());
+        CHECK(plan->months == doctest::Approx(6.0));
+        CHECK(plan->amount == doctest::Approx(reservedPlanForMonths(0.12 + 0.2 * 36.0 / 720.0, 0.2, 6.0).amount));
+
+        // vast.ai gives no reserved discount on unverified machines, whatever their credit_discount_max.
+        j["verification"] = "unverified";
+        Offer unverified = j.get<Offer>();
+        applyReservePeriod(unverified, 6.0);
+        CHECK(unverified.reserveDiscount == 0.0);
+        CHECK(unverified.priceHr == j.get<Offer>().priceHr);
+        j["verification"] = "verified";
+
+        // Without credit_discount_max the server's price stays, and there is nothing to prepay.
+        j.erase("credit_discount_max");
+        Offer none = j.get<Offer>();
+        applyReservePeriod(none, 6.0);
+        CHECK(none.reserveMonths == 0.0);
+        CHECK(none.priceHr.value() == doctest::Approx(0.0856296));
+        CHECK_FALSE(offerReservePlan(none, 16.0).has_value());
+    }
+
     TEST_CASE("higher-is-better ranks: missing values and single values stay uncoloured") {
         const std::vector<std::optional<double>> three{50.0, std::nullopt, 100.0};
         const auto r = higherIsBetterRanks(three);

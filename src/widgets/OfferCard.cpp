@@ -4,6 +4,7 @@
 #include "Theme.hpp"
 #include "imgui.h"
 #include "logic/Regions.hpp"
+#include "logic/SearchFilters.hpp"
 #include "widgets/Badge.hpp"
 #include "widgets/Widgets.hpp"
 
@@ -69,7 +70,13 @@ void OfferPriceTooltip(const Offer& o, const CurrencyFormat& c, std::optional<do
     if (o.storageCostGbMonth) row("  per GB", fmt::money(*o.storageCostGbMonth, c, 3) + "/month");
     if (o.volumePerHour > 0.0) row("New volume", fmt::money(o.volumePerHour, c, 4) + "/hr");
     if (o.discountedPerHour && o.dphTotal && *o.dphTotal - *o.discountedPerHour > 1e-6) {
-        row("Discount", "-" + fmt::money(*o.dphTotal - *o.discountedPerHour, c, 4) + "/hr");
+        row(o.reserveMonths > 0.0 ? "Reserved discount" : "Discount",
+            "-" + fmt::money(*o.dphTotal - *o.discountedPerHour, c, 4) + "/hr");
+    }
+    if (o.reserveMonths > 0.0) {
+        TextDim(std::format("  {:.1f}% off the GPU for prepaying {}", o.reserveDiscount * 100.0,
+                            reservePeriodLabel(o.reserveMonths))
+                    .c_str());
     }
     if (o.slaPremiumPerHour && *o.slaPremiumPerHour > 0.0) row("SLA premium", fmt::money(*o.slaPremiumPerHour, c, 4) + "/hr");
     ImGui::Separator();
@@ -238,7 +245,11 @@ OfferAction OfferCard(const Offer& o, const OfferMetrics& m, const DefectInfo& d
         ImGui::TextUnformatted((fmt::money(o.priceHr, cur) + "/hr").c_str());
         ImGui::PopFont();
         if (ImGui::IsItemHovered()) OfferPriceTooltip(o, cur, ctx.diskGb);
-        dimLine(ctx.interruptible ? "suggested bid  + bandwidth" : "+ bandwidth");
+        std::string priceNote = ctx.interruptible ? "suggested bid  + bandwidth" : "+ bandwidth";
+        if (o.reserveMonths > 0.0) {
+            priceNote = std::format("-{:.0f}% for {} mo  + bandwidth", o.reserveDiscount * 100.0, formatReserveMonths(o.reserveMonths));
+        }
+        dimLine(priceNote);
         if (ImGui::IsItemHovered()) OfferPriceTooltip(o, cur, ctx.diskGb);
         if (ctx.actionLabel) {
             if (*ctx.actionLabel && SecondaryButton(ctx.actionLabel, ImVec2(-FLT_MIN, 0))) action = OfferAction::ListAction;

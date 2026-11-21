@@ -27,6 +27,17 @@
   interruptible offers the price is the console's suggested bid (minimum bid + 5 % of the GPU price, also the
   default bid in the rent dialog); with *Create new local volume* the volume's cost is included. Bandwidth is
   billed separately. Hover a price for the breakdown.
+- **Reserved discounts**: with rental type *reserved* a period dropdown appears next to it: *1 month*,
+  *3 months*, *6 months* or *Custom...* (any number of months, 0.1 - 60; a month is 30 days). Offers are priced
+  like the vast.ai console's reserved search: the host's maximum discount (`credit_discount_max`) scaled to the
+  period, `max x t / (t + 1)` for t months, taken off the GPU price (storage is not discounted; verified machines
+  only). The search asks only for machines available for at least the period (the longer of it and the *Duration*
+  filter). *Discounted Only* in *Machine Options* (on by default) hides hosts that give no reserved discount. The
+  *Reserved Discount* range (first in *Ranges*, 0 - 40 %, vast.ai's cap) limits the discount for the period, e.g.
+  at least 10 % to skip hosts that give next to nothing for 1 month; it is pre-filtered by vast.ai on the host's
+  maximum discount and shows the best discount possible for the period. The *$/hr* range is
+  checked against the discounted price (vast.ai only filters the list price), and the results line counts the
+  offers these checks hide. The card and tooltip show the discount (e.g. *-20% for 1 mo*).
 - **Metrics**: `TFLOPS/$/hr = total_flops / price`, `DLP/$/hr = dlperf / price` (higher is better),
   colour-coded green -> red by percentile within the current result set; missing values show `—`.
 - **Defective machine filter** (on by default, thresholds in Settings): reliability below X %
@@ -70,6 +81,10 @@
   selected template and the panel's disk / volume settings (spinner while renting, then *RENTED*). Right-click >
   *Rent...* opens the Rent dialog to configure the rental first; it also opens when the template does not fit the
   machine or a volume still has to be chosen. Interruptible and reserved offers always use the dialog (bid).
+- **Rent + prepay** (reserved offers): the Rent dialog offers *Prepay {period} now* (on by default) with the
+  amount and the saving. *Rent + prepay* creates the instance and then prepays the period on it (the same as
+  *Add a Reserved Discount* on the Instances page). The button is disabled while your credit is too low. Untick
+  it to rent at the on-demand price and prepay later.
 
 ## Search completeness
 

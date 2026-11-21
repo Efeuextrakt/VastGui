@@ -60,6 +60,14 @@ struct ReservedPlan {
 [[nodiscard]] ReservedPlan reservedPlanForMonths(double dphTotal, double maxDiscount, double months);
 // Inverse: the plan a prepaid amount buys (solves amount = dph * (1 - discount(t)) * 720 * t for t).
 [[nodiscard]] std::optional<ReservedPlan> reservedPlanForAmount(double dphTotal, double maxDiscount, double amount);
+// Reserved searches: prices the offer for prepaying `months`, like vast.ai (type=reserved prices for the duration
+// filter's period instead): the discount applies to the GPU price only. Without credit_discount_max, or on machines
+// that are not verified, the offer keeps vast.ai's price.
+void applyReservePeriod(Offer& o, double months);
+// The prepay plan for renting an offer priced by applyReservePeriod with `diskGb` of disk: its period at the new
+// instance's hourly rate (GPU + storage), computed like the Instances page's reserve dialog. nullopt when the offer
+// is not reserved-priced or has no price.
+[[nodiscard]] std::optional<ReservedPlan> offerReservePlan(const Offer& o, double diskGb);
 
 // Hours until the account credit reaches 0. `rate` is what the account pays now ($/hr); each `later` entry adds
 // its rate after the given number of hours (a prepaid instance whose own credit runs out switches to the account).

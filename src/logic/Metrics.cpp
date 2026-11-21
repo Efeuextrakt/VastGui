@@ -89,6 +89,25 @@ std::optional<ReservedPlan> reservedPlanForAmount(double dphTotal, double maxDis
     return p;
 }
 
+void applyReservePeriod(Offer& o, double months) {
+    // vast.ai gives the reserved discount on verified machines only (discount_rate is null otherwise).
+    if (!o.creditDiscountMax || !o.dphTotal || o.verification != "verified") return;
+    const double gpu = o.gpuCostPerHour.value_or(o.dphBase.value_or(0.0));
+    o.reserveMonths = months;
+    o.reserveDiscount = reservedDiscount(*o.creditDiscountMax, months);
+    o.discountedPerHour = *o.dphTotal - gpu * o.reserveDiscount;
+    o.priceHr = *o.discountedPerHour + o.slaPremiumPerHour.value_or(0.0) + o.bidMarkupPerHour + o.volumePerHour;
+}
+
+std::optional<ReservedPlan> offerReservePlan(const Offer& o, double diskGb) {
+    if (!(o.reserveMonths > 0.0) || !o.creditDiscountMax) return std::nullopt;
+    const double gpu = o.gpuCostPerHour.value_or(o.dphBase.value_or(0.0));
+    const double dph = o.storageCostGbMonth ? gpu + *o.storageCostGbMonth * std::max(0.0, diskGb) / kHoursPerReserveMonth
+                                            : o.dphTotal.value_or(0.0);
+    if (!(dph > 0.0)) return std::nullopt;
+    return reservedPlanForMonths(dph, *o.creditDiscountMax, o.reserveMonths);
+}
+
 std::optional<double> creditRunOutHours(double credit, double rate, std::vector<LaterCharge> later) {
     if (!(credit > 0.0)) return 0.0;
     std::sort(later.begin(), later.end(), [](const LaterCharge& a, const LaterCharge& b) { return a.afterHours < b.afterHours; });

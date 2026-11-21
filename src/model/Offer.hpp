@@ -49,6 +49,9 @@ struct Offer {
     std::optional<double> diskCostPerHour;
     std::optional<double> discountedPerHour;  // search.discountedTotalPerHour (GPU + disk, after vast.ai's discounts)
     std::optional<double> slaPremiumPerHour;
+    std::optional<double> creditDiscountMax;  // host's max reserved discount (0..1)
+    double reserveMonths = 0.0;               // reserved searches: the prepaid period the price is for (0 = not reserved)
+    double reserveDiscount = 0.0;             // reserved searches: discount on the GPU price for that period (0..1)
     double bidMarkupPerHour = 0.0;            // interruptible only: the console's suggested bid is min bid + 5 %
     std::optional<double> availVolDph;        // $/GB/hr of a new local volume on this machine
     double volumePerHour = 0.0;               // cost of the new volume the user plans to create (Search panel)
@@ -131,6 +134,7 @@ inline void from_json(const json& j, Offer& o) {
     o.cpuGhz = optDouble(j, "cpu_ghz");
     o.directPortCount = optDouble(j, "direct_port_count");
     o.score = optDouble(j, "score");
+    o.creditDiscountMax = optDouble(j, "credit_discount_max");
     if (const json* s = find(j, "search")) {
         o.gpuCostPerHour = optDouble(*s, "gpuCostPerHour");
         o.diskCostPerHour = optDouble(*s, "diskHour");

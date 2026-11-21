@@ -41,7 +41,7 @@ care about price per performance and want to manage a fleet of instances from on
 
 | Area | What you get |
 |------|--------------|
-| **Search** | GPU count, models, region, rental type (on-demand / interruptible / reserved), 20 range sliders, specific machines / hosts, presets, card or table view |
+| **Search** | GPU count, models, region, rental type (on-demand / interruptible / reserved with a 1/3/6-month or custom period at the discounted price), 20 range sliders, specific machines / hosts, presets, card or table view |
 | **Metrics** | TFLOPS/$/hr and DLP/$/hr with percentile colouring; sort by any of them |
 | **Defect filter** | reliability threshold, missing/zero key specs, outliers vs. the model median; a separate machine/host blacklist |
 | **Templates** | your own, recommended and searchable templates; incompatible offers (CUDA, GPU RAM, ...) are flagged |

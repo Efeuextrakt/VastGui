@@ -17,6 +17,16 @@ enum class RentalType { OnDemand, Interruptible, Reserved };
 [[nodiscard]] const char* rentalTypeCliName(RentalType t);   // "on-demand" | "bid" | "reserved"
 [[nodiscard]] const char* rentalTypeLabel(RentalType t);
 
+// Reserved searches are priced for a prepaid period of 30-day months (vast.ai's reserve plans: 1, 3 or 6 months).
+inline constexpr double kDaysPerReserveMonth = 30.0;
+inline constexpr double kReservePeriodPresets[] = {1.0, 3.0, 6.0};
+inline constexpr double kMinReserveMonths = 0.1;
+inline constexpr double kMaxReserveMonths = 60.0;
+[[nodiscard]] std::string formatReserveMonths(double months);  // "3", "2.5"
+[[nodiscard]] std::string reservePeriodLabel(double months);   // "1 month", "2.5 months"
+// vast.ai caps a host's reserved discount (credit_discount_max) at 40 %; the period gets max * t / (t + 1) of it.
+inline constexpr double kMaxReserveDiscountPct = 40.0;
+
 enum class RangeField {
     DphTotal,
     GpuRam,
@@ -102,6 +112,11 @@ struct SortOption {
 struct SearchFilters {
     int gpuCount = 0;  // 0 = any, 1/2/4/8 exact, 9 = 9+
     RentalType rentalType = RentalType::OnDemand;
+    // Reserved only: offers are priced with the discount for prepaying this period and must last at least as long.
+    double reserveMonths = 1.0;
+    bool reserveCustom = false;         // the period is a custom value (not one of kReservePeriodPresets)
+    bool reserveDiscountedOnly = true;  // only hosts that give a reserved discount (credit_discount_max > 0)
+    Range reserveDiscountPct;           // discount for the period, % off the GPU price (0..kMaxReserveDiscountPct)
     std::vector<std::string> gpuModels;
     std::string region;  // "" = Planet Earth, continent name or ISO country code
     SortKey sortKey = SortKey::Score;
@@ -136,6 +151,8 @@ struct SearchFilters {
 
     // Disk size the offers are priced for: like the console, at least the template's recommended disk space.
     [[nodiscard]] double effectiveDiskGb() const { return std::max(diskGb, templateDiskGb.value_or(0.0)); }
+    // Minimum offer duration asked from vast.ai: the Duration filter, and for reserved searches the reserve period.
+    [[nodiscard]] std::optional<double> effectiveMinDurationDays() const;
     [[nodiscard]] Range& range(RangeField f) { return ranges[static_cast<std::size_t>(f)]; }
     [[nodiscard]] const Range& range(RangeField f) const { return ranges[static_cast<std::size_t>(f)]; }
     bool operator==(const SearchFilters&) const = default;

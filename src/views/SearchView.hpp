@@ -63,6 +63,7 @@ private:
         double volumeSizeGb = 50.0;
         std::string mountPath = "/data";
         bool cancelUnavail = false;
+        bool prepay = true;  // reserved offers: prepay the reserve period right after renting
         bool submitting = false;
         bool done = false;
     };
@@ -99,6 +100,9 @@ private:
     int hiddenIncompatible_ = 0;
     int hiddenRented_ = 0;
     int hiddenNonFavorite_ = 0;
+    int hiddenPrice_ = 0;  // reserved: discounted price outside the $/hr range
+    int hiddenNoDiscount_ = 0;  // reserved + discounted only: no discount (e.g. unverified machines)
+    int hiddenDiscountRange_ = 0;  // reserved: discount for the period outside the Reserved Discount range
     std::set<std::int64_t> rentedMachines_;  // machines of the user's instances (all states)
     std::size_t receivedOffers_ = 0;  // offers in all responses of the last search, before merging
     int mergedRequests_ = 0;

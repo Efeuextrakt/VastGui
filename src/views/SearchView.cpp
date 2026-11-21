@@ -33,16 +33,30 @@ void sameLineIfFits(float width) {
     if (ImGui::GetContentRegionAvail().x < width) ImGui::NewLine();
 }
 
-std::string rangeLabel(const RangeMeta& m, const Range& r) {
+// Prepays a just-rented reserved instance. If that fails the instance runs on demand, so the way out is shown.
+void prepayNewInstance(App& app, std::int64_t id, double amount) {
+    app.client().submit(cmd::prepayInstance(id, amount), [&app, id, amount](const ApiResult& r) {
+        if (r.ok) {
+            app.toasts().success(std::format("Reserved instance {}: ${:.2f} prepaid", id, amount));
+        } else {
+            app.toasts().warning(std::format("Instance {} was not prepaid", id),
+                                 "It runs at the on-demand price. Retry with Instances > Add a Reserved Discount.");
+        }
+        app.refreshInstances();
+    });
+}
+
+std::string formatRange(const Range& r, int decimals, std::string_view unit, bool dollars = false) {
     if (!r.active()) return "Any";
-    auto f = [&](double v) {
-        if (m.field == RangeField::DphTotal) return std::format("${:.{}f}", v, m.decimals);
-        return std::format("{:.{}f}", v, m.decimals);
-    };
-    const std::string unit = m.unit[0] ? std::string(" ") + m.unit : std::string{};
-    if (r.min && r.max) return f(*r.min) + " - " + f(*r.max) + unit;
-    if (r.min) return ">= " + f(*r.min) + unit;
-    return "<= " + f(*r.max) + unit;
+    auto f = [&](double v) { return std::format("{}{:.{}f}", dollars ? "$" : "", v, decimals); };
+    const std::string u = unit.empty() ? std::string{} : " " + std::string(unit);
+    if (r.min && r.max) return f(*r.min) + " - " + f(*r.max) + u;
+    if (r.min) return ">= " + f(*r.min) + u;
+    return "<= " + f(*r.max) + u;
+}
+
+std::string rangeLabel(const RangeMeta& m, const Range& r) {
+    return formatRange(r, m.decimals, m.unit, m.field == RangeField::DphTotal);
 }
 
 }  // namespace
@@ -111,12 +125,14 @@ void SearchView::search(App& app) {
     for (int i = 0; i < n; ++i) {
         ApiCall c = cmd::searchOffers(f);
         c.quiet = i > 0;  // the console shows the command once
-        c.prepare = [bid = f.rentalType == RentalType::Interruptible](ApiResult& r) -> std::any {
+        c.prepare = [bid = f.rentalType == RentalType::Interruptible,
+                     reserveMonths = f.rentalType == RentalType::Reserved ? f.reserveMonths : 0.0](ApiResult& r) -> std::any {
             auto list = std::make_shared<std::vector<Offer>>();
             for (const auto& j : jsonutil::extractArray(r.data, {"offers"})) {
                 if (!j.is_object()) continue;
                 list->push_back(j.get<Offer>());
                 if (bid) applyBidMarkup(list->back());
+                if (reserveMonths > 0.0) applyReservePeriod(list->back(), reserveMonths);
             }
             return list;
         };
@@ -175,6 +191,16 @@ void SearchView::recompute(App& app) {
     hiddenIncompatible_ = 0;
     hiddenRented_ = 0;
     hiddenNonFavorite_ = 0;
+    hiddenPrice_ = 0;
+    hiddenNoDiscount_ = 0;
+    hiddenDiscountRange_ = 0;
+    // Reserved: vast.ai filters $/hr on the list price; the range is meant for the discounted price shown.
+    const Range& priceRange = f.range(RangeField::DphTotal);
+    const bool checkPrice = f.rentalType == RentalType::Reserved && priceRange.active();
+    const bool discountedOnly = f.rentalType == RentalType::Reserved && f.reserveDiscountedOnly;
+    // vast.ai only pre-filters credit_discount_max; the period's discount (0 on unverified machines) is checked here.
+    const Range& discountRange = f.reserveDiscountPct;
+    const bool checkDiscount = f.rentalType == RentalType::Reserved && discountRange.active();
     table_.invalidate();
     for (std::size_t idx : order) {
         if (!passesVerificationFilter(offers_[idx], f)) {
@@ -184,6 +210,24 @@ void SearchView::recompute(App& app) {
         if (f.favoritesOnly && !(offers_[idx].machineId && s.favoriteMachines.contains(*offers_[idx].machineId))) {
             ++hiddenNonFavorite_;
             continue;
+        }
+        if (discountedOnly && !(offers_[idx].reserveDiscount > 0.0)) {
+            ++hiddenNoDiscount_;
+            continue;
+        }
+        if (checkDiscount) {
+            const double pct = offers_[idx].reserveDiscount * 100.0;
+            if ((discountRange.min && pct < *discountRange.min - 1e-6) || (discountRange.max && pct > *discountRange.max + 1e-6)) {
+                ++hiddenDiscountRange_;
+                continue;
+            }
+        }
+        if (checkPrice) {
+            const auto& price = offers_[idx].priceHr;
+            if (price && ((priceRange.min && *price < *priceRange.min - 1e-9) || (priceRange.max && *price > *priceRange.max + 1e-9))) {
+                ++hiddenPrice_;
+                continue;
+            }
         }
         if (!f.showRentedByMe && offers_[idx].machineId && rentedMachines_.contains(*offers_[idx].machineId)) {
             ++hiddenRented_;
@@ -525,6 +569,41 @@ void SearchView::drawTopBar(App& app) {
     }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rental type");
 
+    if (f.rentalType == RentalType::Reserved) {
+        sameLineIfFits(130 * s);
+        ImGui::SetNextItemWidth(130 * s);
+        const std::string period = f.reserveCustom ? std::string("Custom") : reservePeriodLabel(f.reserveMonths);
+        if (ImGui::BeginCombo("##reserve", (ICON_FA_CALENDAR_DAYS "  " + period).c_str())) {
+            for (const double m : kReservePeriodPresets) {
+                if (ImGui::Selectable(reservePeriodLabel(m).c_str(), !f.reserveCustom && f.reserveMonths == m)) {
+                    f.reserveMonths = m;
+                    f.reserveCustom = false;
+                    filtersChanged(app, true);
+                }
+            }
+            if (ImGui::Selectable("Custom...", f.reserveCustom)) {
+                f.reserveCustom = true;
+                app.markSettingsDirty();
+            }
+            ImGui::EndCombo();
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Reserve period (prepaid, 30-day months)\nPrices include the reserved discount for prepaying "
+                              "this long;\nonly offers available at least this long are listed.");
+        }
+        if (f.reserveCustom) {
+            sameLineIfFits(150 * s);
+            ImGui::SetNextItemWidth(90 * s);
+            if (ImGui::InputDouble("##reservemonths", &f.reserveMonths, 1.0, 3.0, "%.4g")) {
+                f.reserveMonths = std::clamp(f.reserveMonths, kMinReserveMonths, kMaxReserveMonths);
+                filtersChanged(app);
+            }
+            ImGui::SameLine();
+            ImGui::AlignTextToFramePadding();
+            ui::TextDim(std::format("months ({:g} days)", std::round(f.reserveMonths * kDaysPerReserveMonth * 10.0) / 10.0).c_str());
+        }
+    }
+
     sameLineIfFits(190 * s);
     std::string gpuPreview = f.gpuModels.empty() ? "All GPUs"
                              : f.gpuModels.size() == 1 ? f.gpuModels.front()
@@ -837,6 +916,11 @@ void SearchView::drawFilterPanel(App& app) {
             filtersChanged(app);
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Minimum max-instance-duration (time until the host's offer ends)");
+        if (f.rentalType == RentalType::Reserved) {
+            if (const auto d = f.effectiveMinDurationDays(); d && *d > f.minDurationDays.value_or(0.0)) {
+                ui::TextDim(std::format("Reserved: at least {:g} days (reserve period)", *d).c_str());
+            }
+        }
     }
 
     ImGui::SeparatorText("Machines / Hosts");
@@ -866,6 +950,11 @@ void SearchView::drawFilterPanel(App& app) {
                        "even outside the random sample). The other filters still apply.\n\nAdd favorites with the star "
                        "button on the Instances page or an offer's right-click menu; manage the list in Settings > "
                        "Favorites. Favorite offers are marked with a gold star.");
+    }
+    if (f.rentalType == RentalType::Reserved) {
+        if (ImGui::Checkbox("Discounted Only", &f.reserveDiscountedOnly)) filtersChanged(app, true);
+        ui::HelpMarker("Reserved: only hosts that give a reserved discount (verified machines). Without a discount, "
+                       "reserving costs the same as on-demand. Narrow it further with the Reserved Discount range.");
     }
     if (ImGui::Checkbox("Unverified Machines", &f.showUnverified)) filtersChanged(app, true);
     ImGui::Indent();
@@ -932,6 +1021,27 @@ void SearchView::drawFilterPanel(App& app) {
 
     ImGui::Spacing();
     if (ImGui::CollapsingHeader(ICON_FA_SLIDERS "  Ranges", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (f.rentalType == RentalType::Reserved) {
+            Range& r = f.reserveDiscountPct;
+            ImGui::TextUnformatted("Reserved Discount");
+            const std::string label = formatRange(r, 1, "%");
+            ImGui::SameLine(std::max(ImGui::GetCursorPosX(), ImGui::GetContentRegionMax().x - ImGui::CalcTextSize(label.c_str()).x));
+            ui::TextWithColor(r.active() ? p.accent : p.textDim, label.c_str());
+            double lo = r.min.value_or(0.0);
+            double hi = r.max.value_or(kMaxReserveDiscountPct);
+            if (ui::RangeSlider("reserve_discount_pct", &lo, &hi, 0.0, kMaxReserveDiscountPct, 1)) {
+                r.min = lo > 0.0 ? std::optional<double>(lo) : std::nullopt;
+                r.max = hi < kMaxReserveDiscountPct ? std::optional<double>(hi) : std::nullopt;
+                filtersChanged(app);
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Discount off the GPU price for prepaying the reserve period.\n"
+                                  "Hosts give at most %.0f%%; for t months the discount is their maximum x t / (t + 1).",
+                                  kMaxReserveDiscountPct);
+            }
+            const double best = kMaxReserveDiscountPct * f.reserveMonths / (f.reserveMonths + 1.0);
+            ui::TextDim(std::format("At most {:.1f}% for {}", best, reservePeriodLabel(f.reserveMonths)).c_str());
+        }
         for (const auto& m : rangeMetas()) {
             Range& r = f.range(m.field);
             ImGui::TextUnformatted(m.label);
@@ -1004,6 +1114,29 @@ void SearchView::drawResults(App& app) {
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Offers that fail the selected template's requirements.\n"
                               "Tick 'Incompatible Machines' in Machine Options to show them.");
+        }
+    }
+    if (hiddenPrice_ > 0) {
+        ImGui::SameLine();
+        ui::TextDim(std::format("- {} outside the $/hr range hidden", hiddenPrice_).c_str());
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Reserved: the $/hr range is checked against the discounted price for the reserve period.");
+        }
+    }
+    if (hiddenNoDiscount_ > 0) {
+        ImGui::SameLine();
+        ui::TextDim(std::format("- {} without discount hidden", hiddenNoDiscount_).c_str());
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("vast.ai gives the reserved discount on verified machines only.\n"
+                              "Untick 'Discounted Only' in Machine Options to show them at the full price.");
+        }
+    }
+    if (hiddenDiscountRange_ > 0) {
+        ImGui::SameLine();
+        ui::TextDim(std::format("- {} outside the discount range hidden", hiddenDiscountRange_).c_str());
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Their discount for the reserve period is outside the Reserved Discount range\n"
+                              "(e.g. unverified machines, which get no discount).");
         }
     }
     if (defectiveCount_ > 0 && !app.settings().filters.showDefective) {
@@ -1223,6 +1356,34 @@ void SearchView::drawRentModal(App& app) {
                         .c_str());
     }
 
+    // Reserved offers: prepay the period the offer was priced for, so the discount takes effect at once.
+    const std::optional<ReservedPlan> plan = offerReservePlan(o, r.diskGb);
+    const double prepayAmount = plan && r.prepay ? std::round(plan->amount * 100.0) / 100.0 : 0.0;
+    bool tooLittleCredit = false;
+    if (plan) {
+        label("Reserve");
+        ImGui::Checkbox(std::format("Prepay {} now: ${:.2f}  (save {:.1f}% on the GPU)###prepay",
+                                    reservePeriodLabel(plan->months), plan->amount, o.reserveDiscount * 100.0)
+                            .c_str(),
+                        &r.prepay);
+        ImGui::SetCursorPosX(labelW);
+        ImGui::PushTextWrapPos(0.0f);
+        ui::TextDim(r.prepay ? "Deducted from your credit right after the instance is created and deposited on it. You can "
+                               "destroy a reserved instance to refund the remaining deposit minus the discount received "
+                               "so far and a 5% fee."
+                             : "Without prepaying, the instance runs at the on-demand price. Add the discount later with "
+                               "Instances > Add a Reserved Discount.");
+        ImGui::PopTextWrapPos();
+        const double credit = jsonutil::num(app.user(), "credit", -1.0);
+        tooLittleCredit = prepayAmount > 0.0 && credit >= 0.0 && prepayAmount > credit + 1e-9;
+        if (tooLittleCredit) {
+            ImGui::SetCursorPosX(labelW);
+            ui::TextWithColor(p.danger, std::format(ICON_FA_CIRCLE_XMARK " Your credit (${:.2f}) is lower than ${:.2f}.",
+                                                    credit, prepayAmount)
+                                            .c_str());
+        }
+    }
+
     ImGui::Spacing();
     if (ImGui::CollapsingHeader(ICON_FA_LAYER_GROUP "  Template settings (image, launch mode, env, ports, on-start)")) {
         ImGui::Indent(ImGui::GetStyle().IndentSpacing * 0.5f);
@@ -1333,14 +1494,24 @@ void SearchView::drawRentModal(App& app) {
     ImGui::Separator();
     ImGui::Spacing();
     const float bw = 150 * s;
-    ImGui::BeginDisabled(r.image.empty() && !r.useTemplateHash);
-    if (ui::BusyButton(ICON_FA_ROCKET, "Rent now", r.submitting, true, ImVec2(bw, 0)) && !r.submitting) {
+    ImGui::BeginDisabled((r.image.empty() && !r.useTemplateHash) || tooLittleCredit);
+    const std::string rentText = prepayAmount > 0.0 ? std::format("Rent + prepay ${:.2f}", prepayAmount) : std::string("Rent now");
+    const float rentW = std::max(bw, ImGui::CalcTextSize(rentText.c_str()).x + ImGui::GetFrameHeight() * 2.0f);
+    if (ui::BusyButton(ICON_FA_ROCKET, rentText.c_str(), r.submitting, true, ImVec2(rentW, 0)) && !r.submitting) {
         r.submitting = true;
-        app.client().submit(call, [this, &app](const ApiResult& res) {
+        app.client().submit(call, [this, &app, prepayAmount](const ApiResult& res) {
             rent_.submitting = false;
             if (!res.ok) return;
             const auto id = jsonutil::optInt(res.data, "new_contract");
             app.toasts().success("Instance created", id ? "Instance ID " + std::to_string(*id) : res.text);
+            if (prepayAmount > 0.0) {
+                if (id) {
+                    prepayNewInstance(app, *id, prepayAmount);
+                } else {
+                    app.toasts().warning("Not prepaid", "vast.ai returned no instance ID. Add the discount with Instances > "
+                                                        "Add a Reserved Discount.");
+                }
+            }
             app.refreshInstances();
             rent_.done = true;
         });

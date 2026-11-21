@@ -54,7 +54,7 @@ const std::map<std::string, double, std::less<>>& offerMultipliers() {
 bool isKnownOfferField(std::string_view f) {
     static constexpr const char* kFields[] = {
         "bw_nvlink", "compute_cap", "cpu_arch", "cpu_cores", "cpu_cores_effective", "cpu_ghz", "cpu_ram",
-        "cuda_max_good", "datacenter", "direct_port_count", "driver_version", "disk_bw", "disk_space", "dlperf",
+        "credit_discount_max", "cuda_max_good", "datacenter", "direct_port_count", "driver_version", "disk_bw", "disk_space", "dlperf",
         "dlperf_per_dphtotal", "dph_total", "duration", "external", "flops_per_dphtotal", "gpu_arch",
         "gpu_display_active", "gpu_frac", "gpu_mem_bw", "gpu_name", "gpu_ram", "gpu_total_ram", "gpu_max_power",
         "gpu_max_temp", "has_avx", "host_id", "id", "inet_down", "inet_down_cost", "inet_up", "inet_up_cost",
@@ -210,7 +210,20 @@ std::string QueryBuilder::buildQueryString(const SearchFilters& f) {
     if (diskMin > 0) add("disk_space>=" + formatNumber(diskMin));
 
     if (f.minReliability) add("reliability>=" + formatNumber(*f.minReliability));
-    if (f.minDurationDays) add("duration>=" + formatNumber(*f.minDurationDays));
+    if (const auto days = f.effectiveMinDurationDays(); days && *days > 0) add("duration>=" + formatNumber(*days));
+    const bool reserved = f.rentalType == RentalType::Reserved;
+    if (reserved) {
+        // The period's discount is credit_discount_max * t / (t + 1), so vast.ai can pre-filter the discount range on
+        // credit_discount_max (rounded outwards; the exact check, incl. verified-only, is done on the results).
+        const Range& d = f.reserveDiscountPct;
+        const double toMax = (f.reserveMonths + 1.0) / f.reserveMonths / 100.0;
+        if (d.min && *d.min > 0) {
+            add("credit_discount_max>=" + formatNumber(std::floor(*d.min * toMax * 1e4) / 1e4));
+        } else if (f.reserveDiscountedOnly) {
+            add("credit_discount_max>0");
+        }
+        if (d.max) add("credit_discount_max<=" + formatNumber(std::ceil(*d.max * toMax * 1e4) / 1e4));
+    }
     if (f.showUnverified) add("verified=any");
     if (f.showUnavailable) add("rentable=any");
     if (f.staticIpOnly) add("static_ip=true");
@@ -229,7 +242,11 @@ std::string QueryBuilder::buildQueryString(const SearchFilters& f) {
         if (r.min && m.field != RangeField::DiskSpace) {
             add(std::format("{}>={}", m.queryField, formatNumber(*r.min * m.queryScale)));
         }
-        if (r.max) add(std::format("{}<={}", m.queryField, formatNumber(*r.max * m.queryScale)));
+        // Reserved: the $/hr maximum applies to the discounted price, which vast.ai cannot filter (only dph_total,
+        // the list price); the caller checks it. The minimum still holds for the list price, which is never lower.
+        if (r.max && !(reserved && m.field == RangeField::DphTotal)) {
+            add(std::format("{}<={}", m.queryField, formatNumber(*r.max * m.queryScale)));
+        }
     }
 
     std::string out;

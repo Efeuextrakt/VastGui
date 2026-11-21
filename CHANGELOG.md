@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Search: reserved discounts
+- With rental type *reserved*, a period dropdown (*1 month*, *3 months*, *6 months*, *Custom...* in months)
+  prices offers for that period, like the vast.ai console: the host's maximum discount scaled to the period,
+  taken off the GPU price (verified machines only). Only machines available for at least the period are found.
+- *Discounted Only* in *Machine Options* (reserved only, on by default) hides hosts without a reserved discount.
+- *Reserved Discount* range (first in *Ranges*, reserved only, 0 - 40 %): the discount for the selected period,
+  e.g. at least 10 % to skip the many hosts that give next to nothing for 1 month. vast.ai pre-filters it on the
+  host's maximum discount, so the results are not filled with near-0 % offers; below the slider is the best
+  discount possible for the period (40 % x t / (t + 1)).
+- The *$/hr* range is checked against the discounted price; the results line counts the offers it hides.
+- Cards and price tooltips show the discount and its period.
+- Rent dialog: *Rent + prepay* creates the instance and then prepays the period (the amount and saving are
+  shown; disabled when your credit is too low). Untick *Prepay* to rent at the on-demand price.
+- The period, custom value, *Discounted Only* and the discount range are saved with the filters and presets.
+
 ## 1.4.5 - 2026-11-18
 
 ### Favorites & Blacklist page

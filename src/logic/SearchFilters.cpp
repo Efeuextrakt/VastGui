@@ -1,6 +1,8 @@
 #include "logic/SearchFilters.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <format>
 
 namespace vast {
 
@@ -20,6 +22,18 @@ const char* rentalTypeLabel(RentalType t) {
         case RentalType::OnDemand: break;
     }
     return "On-Demand";
+}
+
+std::string formatReserveMonths(double months) { return std::format("{:g}", std::round(months * 100.0) / 100.0); }
+
+std::string reservePeriodLabel(double months) {
+    return formatReserveMonths(months) + (std::abs(months - 1.0) < 1e-9 ? " month" : " months");
+}
+
+std::optional<double> SearchFilters::effectiveMinDurationDays() const {
+    if (rentalType != RentalType::Reserved) return minDurationDays;
+    const double reserveDays = std::round(reserveMonths * kDaysPerReserveMonth * 100.0) / 100.0;
+    return std::max(minDurationDays.value_or(0.0), reserveDays);
 }
 
 namespace {
@@ -127,6 +141,15 @@ void to_json(json& j, const SearchFilters& f) {
     j = json::object();
     j["gpu_count"] = f.gpuCount;
     j["rental_type"] = rentalTypeCliName(f.rentalType);
+    j["reserve_months"] = f.reserveMonths;
+    j["reserve_custom"] = f.reserveCustom;
+    j["reserve_discounted_only"] = f.reserveDiscountedOnly;
+    if (f.reserveDiscountPct.active()) {
+        json rj = json::object();
+        putOpt(rj, "min", f.reserveDiscountPct.min);
+        putOpt(rj, "max", f.reserveDiscountPct.max);
+        j["reserve_discount_pct"] = rj;
+    }
     j["gpu_models"] = f.gpuModels;
     j["region"] = f.region;
     j["sort"] = sortOption(f.sortKey).id;
@@ -169,6 +192,13 @@ void from_json(const json& j, SearchFilters& f) {
     f.gpuCount = gpus == 1 || gpus == 2 || gpus == 4 || gpus == 8 || gpus == 9 ? gpus : 0;
     const std::string rt = str(j, "rental_type", "on-demand");
     f.rentalType = rt == "bid" ? RentalType::Interruptible : rt == "reserved" ? RentalType::Reserved : RentalType::OnDemand;
+    f.reserveMonths = std::clamp(num(j, "reserve_months", 1.0), kMinReserveMonths, kMaxReserveMonths);
+    f.reserveCustom = optBool(j, "reserve_custom").value_or(false);
+    f.reserveDiscountedOnly = optBool(j, "reserve_discounted_only").value_or(true);
+    if (const json* d = find(j, "reserve_discount_pct"); d && d->is_object()) {
+        f.reserveDiscountPct.min = getOpt(*d, "min");
+        f.reserveDiscountPct.max = getOpt(*d, "max");
+    }
     if (const json* g = find(j, "gpu_models"); g && g->is_array()) {
         for (const auto& s : *g) {
             if (s.is_string()) f.gpuModels.push_back(s.get<std::string>());

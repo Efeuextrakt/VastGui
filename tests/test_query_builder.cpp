@@ -58,6 +58,60 @@ TEST_SUITE("QueryBuilder") {
         CHECK(contains(q, "duration>=7"));
     }
 
+    TEST_CASE("reserved: the reserve period sets the minimum duration, discounted hosts only, $/hr max checked locally") {
+        SearchFilters f;
+        f.range(RangeField::DphTotal).min = 0.1;
+        f.range(RangeField::DphTotal).max = 0.5;
+        f.reserveMonths = 3;
+        auto q = QueryBuilder::buildQueryString(f);  // on-demand: the period is ignored
+        CHECK_FALSE(contains(q, "duration"));
+        CHECK_FALSE(contains(q, "credit_discount_max"));
+        CHECK(contains(q, "dph_total<=0.5"));
+
+        f.rentalType = RentalType::Reserved;
+        q = QueryBuilder::buildQueryString(f);
+        CHECK(contains(q, "duration>=90"));
+        CHECK(contains(q, "credit_discount_max>0"));
+        CHECK(contains(q, "dph_total>=0.1"));
+        CHECK_FALSE(contains(q, "dph_total<="));
+        const json b = QueryBuilder::buildRestBody(f);
+        CHECK(b["duration"]["gte"].get<double>() == doctest::Approx(90.0 * 86400.0));
+        CHECK(b.contains("credit_discount_max"));
+        CHECK(b["type"] == "reserved");
+
+        f.minDurationDays = 120;  // the longer of the Duration filter and the period
+        CHECK(contains(QueryBuilder::buildQueryString(f), "duration>=120"));
+        f.minDurationDays = 7;
+        f.reserveMonths = 0.5;
+        CHECK(contains(QueryBuilder::buildQueryString(f), "duration>=15"));
+        f.reserveDiscountedOnly = false;
+        CHECK_FALSE(contains(QueryBuilder::buildQueryString(f), "credit_discount_max"));
+    }
+
+    TEST_CASE("reserved: the discount range is pre-filtered on credit_discount_max for the period") {
+        SearchFilters f;
+        f.rentalType = RentalType::Reserved;
+        f.reserveMonths = 1;  // discount = max / 2
+        f.reserveDiscountPct.min = 10;
+        auto q = QueryBuilder::buildQueryString(f);
+        CHECK(contains(q, "credit_discount_max>=0.2"));
+        CHECK_FALSE(contains(q, "credit_discount_max>0"));
+        CHECK_FALSE(contains(q, "credit_discount_max<="));
+
+        f.reserveMonths = 3;  // discount = max * 3/4
+        f.reserveDiscountPct.min.reset();
+        f.reserveDiscountPct.max = 15;
+        q = QueryBuilder::buildQueryString(f);
+        CHECK(contains(q, "credit_discount_max>0"));  // discounted only, no minimum
+        CHECK(contains(q, "credit_discount_max<=0.2"));
+
+        f.reserveDiscountPct.min = 1;  // 0.01333... rounded down, so the boundary host is not lost
+        CHECK(contains(QueryBuilder::buildQueryString(f), "credit_discount_max>=0.0133"));
+
+        f.rentalType = RentalType::OnDemand;
+        CHECK_FALSE(contains(QueryBuilder::buildQueryString(f), "credit_discount_max"));
+    }
+
     TEST_CASE("CUDA requirement merges text filter and template, unless incompatible machines are shown") {
         SearchFilters f;
         f.minCuda = "12.1";
@@ -206,6 +260,10 @@ TEST_SUITE("QueryBuilder") {
         f.gpuModels = {"A100 SXM4"};
         f.region = "Europe";
         f.rentalType = RentalType::Reserved;
+        f.reserveMonths = 2.5;
+        f.reserveCustom = true;
+        f.reserveDiscountedOnly = false;
+        f.reserveDiscountPct.min = 5;
         f.sortKey = SortKey::DlpPerDollar;
         f.sortDesc = false;
         f.minReliability = 0.97;
