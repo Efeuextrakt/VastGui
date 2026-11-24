@@ -500,7 +500,7 @@ void TemplatesView::draw(App& app) {
     const std::string msg = std::format("Delete template \"{}\" ({})?", jsonutil::str(pendingDelete_, "name"),
                                         jsonutil::str(pendingDelete_, "hash_id"));
     if (ui::ConfirmModal("Delete template?###tpldel", msg, "Delete")) {
-        app.run(cmd::deleteTemplate(jsonutil::optInt(pendingDelete_, "id"), jsonutil::str(pendingDelete_, "hash_id")),
+        app.run(cmd::deleteTemplate(jsonutil::optInt(pendingDelete_, "id")),
                 [this, &app](const ApiResult&) { reloadAfterChange(app); }, "Template deleted");
     }
 }

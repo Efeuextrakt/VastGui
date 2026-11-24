@@ -17,6 +17,7 @@
 #include "widgets/Widgets.hpp"
 
 #include <format>
+#include <utility>
 
 namespace vast {
 
@@ -41,8 +42,91 @@ void SettingsView::draw(App& app) {
     }
     if (ImGui::CollapsingHeader(ICON_FA_STAR "  Favorites")) drawFavorites(app);
     if (ImGui::CollapsingHeader(ICON_FA_BAN "  Blacklist")) drawBlacklist(app);
+    if (ImGui::CollapsingHeader(ICON_FA_SERVER "  Instances")) drawInstances(app);
+    if (ImGui::CollapsingHeader(ICON_FA_FILE_EXPORT "  Export / import settings")) drawTransfer(app);
     if (ImGui::CollapsingHeader(ICON_FA_CIRCLE_INFO "  About & files")) drawAbout(app);
     ImGui::EndChild();
+
+    if (openImportConfirm_) {
+        ImGui::OpenPopup("Import settings?###importcfg");
+        openImportConfirm_ = false;
+    }
+    if (!pendingImport_) return;
+    std::string msg = std::format("Replace all settings with the ones from\n{}?\n\nYour API key and the server URL are "
+                                  "kept. Export the current settings first if you may want them back.",
+                                  importFile_);
+    if (!importProblems_.empty()) {
+        msg += std::format("\n\n{} value(s) in the file are invalid and will use the defaults:\n{}", importProblems_.size(),
+                           fmt::join(importProblems_, "\n"));
+    }
+    if (ui::ConfirmModal("Import settings?###importcfg", msg, "Import")) {
+        app.replaceSettings(std::move(*pendingImport_));
+        pendingImport_.reset();
+        pendingInit_ = false;  // re-read font size / scale
+        app.toasts().success("Settings imported", importFile_);
+    }
+}
+
+void SettingsView::drawInstances(App& app) {
+    Settings& s = app.settings();
+    constexpr std::pair<const char*, const char*> kChoices[] = {
+        {"ask", "Ask every time"},
+        {"selected", "Use the template selected in Search"},
+        {"instance", "Keep the instance's template"},
+    };
+    const char* preview = kChoices[0].second;
+    for (const auto& [id, label] : kChoices) {
+        if (s.recreateTemplate == id) preview = label;
+    }
+    row("Update from template", ImGui::GetFontSize() * 11);
+    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 18);
+    if (ImGui::BeginCombo("##recreate", preview)) {
+        for (const auto& [id, label] : kChoices) {
+            if (ImGui::Selectable(label, s.recreateTemplate == id)) {
+                s.recreateTemplate = id;
+                app.markSettingsDirty();
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ui::HelpMarker("Which template Instances > Update from template (recreates the container) starts with: the one "
+                   "selected on the Search page (with its template ID) or the instance's own. The dialog can still "
+                   "switch between them.");
+    ImGui::Spacing();
+}
+
+void SettingsView::drawTransfer(App& app) {
+    ui::TextDim("Save all settings (filters, presets, templates, favorites, blacklist, columns, appearance) to a file, "
+                "e.g. as a backup or for another PC. The API key is never exported.");
+    if (ui::SecondaryButton(ICON_FA_FILE_EXPORT " Export settings...")) {
+        if (const auto path = platform::saveFileDialog("Export settings", "VastGui-settings.json")) {
+            if (platform::writeTextFileAtomic(*path, exportSettings(app.settings(), kAppVersion), true)) {
+                app.toasts().success("Settings exported", platform::pathToUtf8(*path));
+            } else {
+                app.toasts().error("Could not export settings", platform::pathToUtf8(*path));
+            }
+        }
+    }
+    ImGui::SameLine();
+    if (ui::SecondaryButton(ICON_FA_FILE_IMPORT " Import settings...")) {
+        if (const auto path = platform::openFileDialog("Import settings")) {
+            importFile_ = platform::pathToUtf8(*path);
+            const auto text = platform::readTextFile(*path);
+            Settings imported;
+            std::string error;
+            if (!text) {
+                app.toasts().error("Could not read the file", importFile_);
+            } else if (!importSettings(*text, app.settings(), imported, importProblems_, error)) {
+                app.toasts().error("Not imported", error);
+            } else {
+                pendingImport_ = std::move(imported);
+                openImportConfirm_ = true;
+            }
+        }
+    }
+    ui::HelpMarker("Import replaces all settings; your API key and the server URL stay as they are. Also accepts a "
+                   "VastGui.json from another installation.");
+    ImGui::Spacing();
 }
 
 void SettingsView::drawAccount(App& app) {

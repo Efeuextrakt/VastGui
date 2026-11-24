@@ -149,6 +149,25 @@ TEST_SUITE("Backend") {
         CHECK((*cmd::labelInstance(5, "my run").rest.body)["label"] == "my run");
     }
 
+    TEST_CASE("command catalogue: delete template uses the numeric id, never the hash") {
+        const auto d = cmd::deleteTemplate(334548);
+        CHECK(d.rest.method == HttpMethod::Delete);
+        CHECK(*d.rest.body == json{{"template_id", 334548}});
+        CHECK_FALSE(cmd::deleteTemplate(std::nullopt).error.empty());
+    }
+
+    TEST_CASE("command catalogue: update instance always sends the image") {
+        cmd::UpdateInstanceParams p;
+        p.templateId = 12;
+        CHECK_FALSE(cmd::updateInstance(5, p).error.empty());  // no image: refused before sending
+        p.image = "vastai/pytorch:latest";
+        const auto u = cmd::updateInstance(5, p);
+        CHECK(u.error.empty());
+        CHECK(u.rest.path == "/instances/update_template/5/");
+        CHECK((*u.rest.body)["image"] == "vastai/pytorch:latest");
+        CHECK((*u.rest.body)["template_id"] == 12);
+    }
+
     TEST_CASE("command catalogue: create instance") {
         cmd::CreateInstanceParams p;
         p.offerId = 123;

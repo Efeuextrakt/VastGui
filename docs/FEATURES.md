@@ -137,6 +137,9 @@ search to search because the server keeps sampling. Each request at limit 1000 d
 - Copy SSH command / SCP URL, open Jupyter, change bid, prepay, deposit, execute, copy files (between remote
   locations), cloud copy, snapshot, attach SSH key, create template from instance, recycle, update, favorite or
   blacklist the machine (star and ban buttons next to each other; gold / red while active).
+- *Update from template* (recreates the container) starts with the template selected on the Search page (with its
+  template ID) or the instance's own: asked the first time (*Don't ask again*), set in Settings > *Instances*,
+  switchable in the dialog.
 - GPU/CPU/VRAM/disk usage bars, TFLOPS/$/hr and DLP/$/hr per instance and an ImPlot $/hr sparkline per instance.
 - **Reserved discount** (*Reserve* column / row menu *Add a Reserved Discount...*): a *Save NN%* badge shows the
   best discount the host offers (*Saved NN%* once reserved). It opens a dialog like the web console with

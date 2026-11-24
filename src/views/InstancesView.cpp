@@ -367,6 +367,26 @@ std::string envFromInstance(const json& raw) {
 
 std::vector<std::int64_t> InstancesView::selectedIds() const { return {selected_.begin(), selected_.end()}; }
 
+void InstancesView::prefillUpdate(App& app, int source) {
+    updateSource_ = source;
+    if (source == 0) {
+        const Template& t = app.settings().currentTemplate;
+        text1_ = t.imageWithTag();
+        text2_ = t.env;
+        text3_ = t.onstart;
+        text4_ = t.id ? std::to_string(*t.id) : std::string{};
+        updateTemplateHash_ = t.hashId;
+    } else {
+        const Instance& i = target_;
+        text1_ = i.image;
+        text2_ = envFromInstance(i.raw);
+        text3_ = jsonutil::str(i.raw, "onstart");
+        text4_ = i.templateId ? std::to_string(*i.templateId) : std::string{};
+        updateTemplateHash_ = i.templateHashId;
+    }
+    updateTemplateIdText_ = text4_;
+}
+
 void InstancesView::openDialog(Dialog d, const Instance& inst) {
     dialog_ = d;
     target_ = inst;
@@ -405,9 +425,9 @@ void InstancesView::openDialog(Dialog d, const Instance& inst) {
             text4_ = jsonutil::str(inst.raw, "onstart");
             break;
         case Dialog::Update:
-            text1_ = inst.image;
-            text2_ = envFromInstance(inst.raw);
-            text3_ = jsonutil::str(inst.raw, "onstart");
+            // Filled once the template is chosen (selected in Search or the instance's own, see drawDialogs).
+            updateSource_ = -1;
+            updateDontAsk_ = false;
             break;
         case Dialog::Snapshot: text4_ = "docker.io"; break;
         default: break;
@@ -1384,23 +1404,82 @@ void InstancesView::drawDialogs(App& app) {
                 close = true;
             }
             break;
-        case Dialog::Update:
+        case Dialog::Update: {
             title(ICON_FA_ARROWS_ROTATE, std::format("Update instance {} (recreates the container)", i.id));
+            Settings& st = app.settings();
+            const Template& sel = st.currentTemplate;
+            const std::string selName = sel.name.empty() ? sel.imageWithTag() : sel.name;
+            const std::string instName = !i.templateName.empty() ? i.templateName : i.image;
+            if (updateSource_ < 0) {
+                if (st.recreateTemplate == "selected") prefillUpdate(app, 0);
+                if (st.recreateTemplate == "instance") prefillUpdate(app, 1);
+            }
+            if (updateSource_ < 0) {
+                // First use (or "ask" in Settings): which template to recreate the container with.
+                ImGui::TextWrapped("Recreate instance %lld with which template?", static_cast<long long>(i.id));
+                ImGui::Spacing();
+                int chosen = -1;
+                if (ImGui::Button(std::format(ICON_FA_LAYER_GROUP "  Selected template: {}", selName).c_str(), ImVec2(-FLT_MIN, 0))) {
+                    chosen = 0;
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("The template currently selected on the Search page (%s), with its template ID.",
+                                      sel.imageWithTag().c_str());
+                }
+                if (ui::SecondaryButton(std::format(ICON_FA_SERVER "  Instance's template: {}", instName).c_str(), ImVec2(-FLT_MIN, 0))) {
+                    chosen = 1;
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("The image, docker options and on-start script the instance was created with "
+                                      "(and its template ID, if any).");
+                }
+                ImGui::Spacing();
+                ImGui::Checkbox("Don't ask again", &updateDontAsk_);
+                ui::HelpMarker("Remembers this choice. Change it in Settings > Instances.");
+                if (chosen >= 0) {
+                    if (updateDontAsk_) {
+                        st.recreateTemplate = chosen == 0 ? "selected" : "instance";
+                        app.markSettingsDirty();
+                    }
+                    prefillUpdate(app, chosen);
+                }
+                break;
+            }
+            ImGui::AlignTextToFramePadding();
+            ui::TextDim("Use");
+            ImGui::SameLine(130 * s);
+            int src = updateSource_;
+            if (ImGui::RadioButton("Selected template", &src, 0) && updateSource_ != 0) prefillUpdate(app, 0);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", selName.c_str());
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Instance's template", &src, 1) && updateSource_ != 1) prefillUpdate(app, 1);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", instName.c_str());
+            ImGui::SetCursorPosX(130 * s);
+            ui::TextDim((updateSource_ == 0 ? selName : instName).c_str());
             field("Template ID", &text4_, "optional numeric template id");
             field("Image", &text1_);
             field("Docker options", &text2_);
             ImGui::TextUnformatted("On-start");
             ImGui::InputTextMultiline("##onstartu", &text3_, ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 4));
+            ImGui::BeginDisabled(fmt::trim(text1_).empty());
             if (ImGui::Button("Update", ImVec2(bw, 0))) {
                 cmd::UpdateInstanceParams p;
                 if (auto id = jsonutil::parseDouble(text4_)) p.templateId = static_cast<std::int64_t>(*id);
-                if (text1_ != i.image) p.image = text1_;
+                // The hash belongs to the prefilled template; a hand-edited ID must not be paired with it.
+                if (p.templateId && text4_ == updateTemplateIdText_) p.templateHash = updateTemplateHash_;
+                // vast.ai requires the image on every update ("image must be a str"), also when it is unchanged.
+                p.image = fmt::trim(text1_);
                 p.env = text2_;
                 p.onstart = text3_;
                 app.run(cmd::updateInstance(i.id, p), refresh, "Update requested");
                 close = true;
             }
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && fmt::trim(text1_).empty()) {
+                ImGui::SetTooltip("vast.ai needs an image for the update.");
+            }
             break;
+        }
         case Dialog::Destroy: {
             std::vector<std::string> ids;
             for (auto id : bulkIds_) ids.push_back(std::to_string(id));

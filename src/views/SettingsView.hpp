@@ -1,7 +1,11 @@
 #pragma once
 
+#include "Config.hpp"
+
 #include <cstdint>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace vast {
 
@@ -18,6 +22,8 @@ private:
     void drawSearch(App& app);
     void drawBlacklist(App& app);
     void drawFavorites(App& app);
+    void drawInstances(App& app);
+    void drawTransfer(App& app);
     void drawAbout(App& app);
 
     std::string keyInput_;
@@ -32,6 +38,10 @@ private:
     float pendingFontSize_ = 15.0f;
     float pendingUiScale_ = 1.0f;
     bool pendingInit_ = false;
+    std::optional<Settings> pendingImport_;  // read from a file, applied after the confirmation
+    std::vector<std::string> importProblems_;
+    std::string importFile_;
+    bool openImportConfirm_ = false;
 };
 
 }  // namespace vast

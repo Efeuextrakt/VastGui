@@ -51,3 +51,7 @@ Only configuration files - in `%APPDATA%\VastGui\` (Linux: `~/.config/VastGui/`)
 The app starts with sane defaults when they are missing; a corrupt `VastGui.json` is backed up as
 `VastGui.json.bad`. Values that are invalid or outdated (e.g. an unknown theme or sort option, a damaged section)
 are reset to their defaults one by one - the other settings are kept - and listed in the Activity log.
+
+**Export / import** (Settings -> *Export / import settings*): exports everything in `VastGui.json` except the API
+key to a file of your choice; importing such a file (or a `VastGui.json` from another installation) replaces all
+settings after a confirmation, keeping your API key and server URL.

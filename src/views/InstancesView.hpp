@@ -19,6 +19,7 @@ class InstancesView {
 public:
     void draw(App& app);
     void drawFloating(App& app);
+    void onSettingsReplaced() { tableColumnsApplied_ = false; }
 
 private:
     enum class Dialog {
@@ -63,6 +64,8 @@ private:
     void drawDialogs(App& app);
     void openDialog(Dialog d, const Instance& inst);
     void openLogs(App& app, const Instance& inst);
+    // Update from template: fills the dialog from the template selected in Search (0) or the instance's own (1).
+    void prefillUpdate(App& app, int source);
     [[nodiscard]] std::vector<std::int64_t> selectedIds() const;
 
     std::set<std::int64_t> selected_;
@@ -81,6 +84,10 @@ private:
     bool flag_ = false;
     std::string execOutput_;
     bool busy_ = false;
+    int updateSource_ = -1;          // Update dialog: -1 not chosen yet, 0 selected template, 1 instance's template
+    bool updateDontAsk_ = false;
+    std::string updateTemplateHash_; // hash of the prefilled template (sent while its id is unchanged)
+    std::string updateTemplateIdText_;
     Resource connections_;
     Resource sshKeys_;
 

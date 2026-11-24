@@ -72,6 +72,8 @@ public:
     // Services for views.
     [[nodiscard]] Settings& settings() { return settings_; }
     void markSettingsDirty();
+    // Replaces all settings (Settings > Import) and refreshes everything that depends on them.
+    void replaceSettings(Settings s);
     void applyAppearance();    // theme/font changes (outside a frame)
     void requestAppearanceUpdate() { appearanceDirty_ = true; }  // applied at the start of the next frame
     void reconfigureBackend(); // backend/API key changes

@@ -13,6 +13,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace vast {
@@ -73,6 +74,9 @@ struct Settings {
     std::string templateSort = "name";  // template cards: "name" or "date"
     bool templateSortDesc = false;
     bool instanceCardView = true;
+    // Template used by Instances > Update from template (recreates the container): "ask", "selected" (the one
+    // selected in Search) or "instance" (the instance's own template).
+    std::string recreateTemplate = "ask";
     bool machineListCardView = true;  // Favorites & Blacklist page: cards or table
     std::string instanceSort = "label";  // instance cards: label, id, status, gpu, price, uptime
     bool instanceSortDesc = false;
@@ -101,5 +105,13 @@ void readSettings(const json& j, Settings& s, std::vector<std::string>* problems
 [[nodiscard]] Settings loadSettings(const ConfigPaths& paths, std::string& error);
 // Never writes the API key in plaintext: if it cannot be encrypted nothing is written and `error` is set.
 bool saveSettings(const ConfigPaths& paths, const Settings& s, std::string* error = nullptr);
+
+// Settings > Export: the settings as JSON, without the API key (also not encrypted: the key file is per PC).
+[[nodiscard]] std::string exportSettings(const Settings& s, const char* appVersion);
+// Settings > Import: reads an exported (or VastGui.json) file into `out`. The API key and the server URL are kept
+// from `current` (an imported URL could send the key elsewhere). Returns false with `error` when the text is not
+// a settings file; `problems` lists values that were replaced by their defaults.
+bool importSettings(std::string_view text, const Settings& current, Settings& out, std::vector<std::string>& problems,
+                    std::string& error);
 
 }  // namespace vast

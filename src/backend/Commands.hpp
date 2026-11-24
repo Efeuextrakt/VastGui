@@ -134,7 +134,7 @@ struct TemplateParams {
 };
 [[nodiscard]] ApiCall createTemplate(const TemplateParams& p);
 [[nodiscard]] ApiCall updateTemplate(const std::string& hashId, const TemplateParams& p);
-[[nodiscard]] ApiCall deleteTemplate(std::optional<Id> id, const std::string& hashId);
+[[nodiscard]] ApiCall deleteTemplate(std::optional<Id> id);
 
 // Storage
 [[nodiscard]] ApiCall searchVolumes(const std::string& query, double storageGb);

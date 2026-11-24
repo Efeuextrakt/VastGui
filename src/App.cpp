@@ -162,6 +162,15 @@ void App::markSettingsDirty() {
     settingsDirty_ = true;
 }
 
+void App::replaceSettings(Settings s) {
+    settings_ = std::move(s);
+    markSettingsDirty();
+    appearanceDirty_ = true;                // theme, font size, scale
+    reconfigureBackend();                   // log file setting
+    instancesView_->onSettingsReplaced();   // re-apply the saved table columns
+    search_->onTemplateChanged(*this);      // template requirements, filters: new search
+}
+
 void App::saveIfDirty(bool force) {
     if (!settingsDirty_) return;
     if (!force && ImGui::GetTime() - dirtySince_ < 1.0) return;

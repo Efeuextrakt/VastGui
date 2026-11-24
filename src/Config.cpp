@@ -76,6 +76,7 @@ void to_json(json& j, const Settings& s) {
     j["template_sort"] = s.templateSort;
     j["template_sort_desc"] = s.templateSortDesc;
     j["instance_card_view"] = s.instanceCardView;
+    j["recreate_template"] = s.recreateTemplate;
     j["machine_list_card_view"] = s.machineListCardView;
     j["instance_sort"] = s.instanceSort;
     j["instance_sort_desc"] = s.instanceSortDesc;
@@ -202,6 +203,7 @@ void readSettings(const json& j, Settings& s, std::vector<std::string>* problems
     s.templateSort = oneOf("template_sort", {"name", "date"}, "name");
     s.templateSortDesc = optBool(j, "template_sort_desc").value_or(false);
     s.instanceCardView = optBool(j, "instance_card_view").value_or(true);
+    s.recreateTemplate = oneOf("recreate_template", {"ask", "selected", "instance"}, "ask");
     s.machineListCardView = optBool(j, "machine_list_card_view").value_or(true);
     s.instanceSort = oneOf("instance_sort", {"label", "id", "status", "gpu", "price", "uptime"}, "label");
     s.instanceSortDesc = optBool(j, "instance_sort_desc").value_or(false);
@@ -277,6 +279,41 @@ bool saveSettings(const ConfigPaths& paths, const Settings& s, std::string* erro
         if (error) *error = "could not write " + platform::pathToUtf8(paths.settingsFile);
         return false;
     }
+    return true;
+}
+
+std::string exportSettings(const Settings& s, const char* appVersion) {
+    json j = s;  // never contains the API key (saveSettings adds it encrypted)
+    j["exported_by"] = std::string("VastGui ") + appVersion;
+    return j.dump(2);
+}
+
+bool importSettings(std::string_view text, const Settings& current, Settings& out, std::vector<std::string>& problems,
+                    std::string& error) {
+    problems.clear();
+    error.clear();
+    const json j = json::parse(text, nullptr, false);
+    if (j.is_discarded() || !j.is_object()) {
+        error = "the file is not valid JSON";
+        return false;
+    }
+    // A settings file has at least a few known top-level keys; anything else is probably the wrong file.
+    static constexpr const char* kKnown[] = {"version", "filters", "theme", "template", "blacklist", "server_url"};
+    if (std::none_of(std::begin(kKnown), std::end(kKnown), [&](const char* k) { return j.contains(k); })) {
+        error = "the file does not contain VastGui settings";
+        return false;
+    }
+    Settings s;
+    try {
+        readSettings(j, s, &problems);
+    } catch (const std::exception& e) {
+        error = std::string("the settings could not be read: ") + e.what();
+        return false;
+    }
+    s.apiKey = current.apiKey;
+    s.apiKeySealed = current.apiKeySealed;
+    s.serverUrl = current.serverUrl;
+    out = std::move(s);
     return true;
 }
 

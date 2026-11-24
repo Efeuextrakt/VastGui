@@ -17,6 +17,24 @@
   shown; disabled when your credit is too low). Untick *Prepay* to rent at the on-demand price.
 - The period, custom value, *Discounted Only* and the discount range are saved with the filters and presets.
 
+### Instances
+- *Update from template* (recreates the container) can use the template selected on the Search page, with its
+  template ID, instead of the instance's saved one. The first time it asks which one to use, with *Don't ask
+  again*; the choice is in Settings > *Instances* (*Ask every time* / *Use the template selected in Search* /
+  *Keep the instance's template*). The dialog can still switch between the two. *Recycle* always reuses the
+  instance's image (vast.ai's recycle has no template option).
+- Fixed: *Update from template* failed with "image must be a str, not NoneType" when the image was unchanged:
+  VastGui only sent the image when it differed, but vast.ai requires it on every update.
+
+### Templates
+- Fixed: templates could not be deleted. VastGui sent the template's `hash_id`, which copies of a template share;
+  vast.ai deletes by the numeric template ID only.
+
+### Settings
+- *Export / import settings*: export all settings to a JSON file (backup or another PC) and import them again.
+  The API key is never exported; on import your API key and the server URL are kept. Import shows which values
+  were invalid and asks before replacing the settings.
+
 ## 1.4.5 - 2026-11-18
 
 ### Favorites & Blacklist page

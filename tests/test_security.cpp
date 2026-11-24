@@ -141,6 +141,38 @@ TEST_SUITE("Security") {
         CHECK(problems.size() == 1);
     }
 
+    TEST_CASE("settings export / import: no API key, key and server URL kept, wrong files refused") {
+        Settings s;
+        s.apiKey = "secret-key-0123456789";
+        s.theme = "light";
+        s.favoriteMachines = {42};
+        s.recreateTemplate = "selected";
+        s.serverUrl = "https://evil.example";
+        const std::string text = exportSettings(s, "9.9.9");
+        CHECK(text.find("secret-key") == std::string::npos);
+        CHECK(text.find("api_key") == std::string::npos);
+        CHECK(text.find("VastGui 9.9.9") != std::string::npos);
+
+        Settings current;
+        current.apiKey = "my-own-key";
+        Settings out;
+        std::vector<std::string> problems;
+        std::string error;
+        REQUIRE(importSettings(text, current, out, problems, error));
+        CHECK(problems.empty());
+        CHECK(out.theme == "light");
+        CHECK(out.favoriteMachines == std::set<std::int64_t>{42});
+        CHECK(out.recreateTemplate == "selected");
+        CHECK(out.apiKey == "my-own-key");
+        CHECK(out.serverUrl == current.serverUrl);  // an imported URL could send the key elsewhere
+
+        CHECK_FALSE(importSettings("not json", current, out, problems, error));
+        CHECK_FALSE(importSettings(R"({"foo": 1})", current, out, problems, error));  // not a settings file
+        CHECK(importSettings(R"({"theme": "neon", "filters": {}})", current, out, problems, error));
+        CHECK(out.theme == "dark");
+        CHECK(problems.size() == 1);
+    }
+
     TEST_CASE("settings: missing, outdated or invalid values fall back to the defaults one by one") {
         TempDir dir;
         ConfigPaths paths;

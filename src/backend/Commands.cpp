@@ -283,10 +283,11 @@ ApiCall cloudCopy(const CloudCopyParams& p) {
 }
 
 ApiCall updateInstance(Id id, const UpdateInstanceParams& p) {
-    json body{{"id", id}};
+    // vast.ai rejects updates without an image ("image must be a str, not NoneType"), even with a template id.
+    if (p.image.empty()) return failing("Update instance", "an image is required to update the instance");
+    json body{{"id", id}, {"image", p.image}};
     if (p.templateId) body["template_id"] = *p.templateId;
     if (!p.templateHash.empty()) body["template_hash_id"] = p.templateHash;
-    if (!p.image.empty()) body["image"] = p.image;
     if (!p.env.empty()) body["env"] = envToJson(p.env);
     if (!p.onstart.empty()) body["onstart"] = p.onstart;
     if (!p.args.empty()) body["args"] = p.args;
@@ -394,9 +395,10 @@ ApiCall updateTemplate(const std::string& hashId, const TemplateParams& p) {
     return make("Update template", rest(HttpMethod::Put, "/api/v1/template/", body));
 }
 
-ApiCall deleteTemplate(std::optional<Id> id, const std::string& hashId) {
-    if (!hashId.empty()) return make("Delete template", rest(HttpMethod::Delete, "/template/", json{{"hash_id", hashId}}));
-    return make("Delete template", rest(HttpMethod::Delete, "/template/", json{{"template_id", id.value_or(0)}}));
+ApiCall deleteTemplate(std::optional<Id> id) {
+    // vast.ai deletes by the numeric id only (docs: "not hash_id"); the hash_id is shared by copies of a template.
+    if (id && *id > 0) return make("Delete template", rest(HttpMethod::Delete, "/template/", json{{"template_id", *id}}));
+    return failing("Delete template", "the template has no numeric id - reload the template list and try again");
 }
 
 // ---- Storage ---------------------------------------------------------------
