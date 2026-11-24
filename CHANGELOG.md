@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.5.0 - 2026-11-24
 
 ### Search: reserved discounts
 - With rental type *reserved*, a period dropdown (*1 month*, *3 months*, *6 months*, *Custom...* in months)
