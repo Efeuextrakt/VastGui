@@ -428,6 +428,7 @@ void InstancesView::openDialog(Dialog d, const Instance& inst) {
             // Filled once the template is chosen (selected in Search or the instance's own, see drawDialogs).
             updateSource_ = -1;
             updateDontAsk_ = false;
+            flag_ = true;  // recreate the container right after the update
             break;
         case Dialog::Snapshot: text4_ = "docker.io"; break;
         default: break;
@@ -1461,8 +1462,17 @@ void InstancesView::drawDialogs(App& app) {
             field("Docker options", &text2_);
             ImGui::TextUnformatted("On-start");
             ImGui::InputTextMultiline("##onstartu", &text3_, ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 4));
+            // update_template only stores the new template / image / settings; the container keeps running with the
+            // old ones until it is recreated, which recycle does (in place, keeping the GPUs).
+            ImGui::Checkbox("Recreate the container now (recycle)", &flag_);
+            ui::HelpMarker("vast.ai applies the new template when the container is recreated. With this ticked, VastGui "
+                           "recycles the instance right after the update: the container is destroyed and recreated in "
+                           "place from the new image, keeping the machine and GPUs. Data inside the container (not on "
+                           "volumes) is lost. Unticked, the new template is used the next time the container is "
+                           "recreated.");
+            if (flag_) ui::TextWithColor(ui::palette().warning, "Data inside the container is lost.");
             ImGui::BeginDisabled(fmt::trim(text1_).empty());
-            if (ImGui::Button("Update", ImVec2(bw, 0))) {
+            if (ImGui::Button(flag_ ? ICON_FA_RECYCLE " Update + recreate" : "Update", ImVec2(flag_ ? 0.0f : bw, 0))) {
                 cmd::UpdateInstanceParams p;
                 if (auto id = jsonutil::parseDouble(text4_)) p.templateId = static_cast<std::int64_t>(*id);
                 // The hash belongs to the prefilled template; a hand-edited ID must not be paired with it.
@@ -1471,7 +1481,15 @@ void InstancesView::drawDialogs(App& app) {
                 p.image = fmt::trim(text1_);
                 p.env = text2_;
                 p.onstart = text3_;
-                app.run(cmd::updateInstance(i.id, p), refresh, "Update requested");
+                const std::int64_t id = i.id;
+                if (flag_) {
+                    app.run(cmd::updateInstance(id, p), [&app, id](const ApiResult&) {
+                        app.run(cmd::recycleInstance(id), [&app](const ApiResult&) { app.refreshInstances(); },
+                                "Recreating the container with the new template");
+                    }, "Template updated");
+                } else {
+                    app.run(cmd::updateInstance(id, p), refresh, "Template updated (applied when the container is recreated)");
+                }
                 close = true;
             }
             ImGui::EndDisabled();

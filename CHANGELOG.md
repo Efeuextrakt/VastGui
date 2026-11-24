@@ -25,6 +25,9 @@
   instance's image (vast.ai's recycle has no template option).
 - Fixed: *Update from template* failed with "image must be a str, not NoneType" when the image was unchanged:
   VastGui only sent the image when it differed, but vast.ai requires it on every update.
+- Fixed: *Update from template* did not recreate the instance - vast.ai's update only stores the new template,
+  image and settings. *Recreate the container now (recycle)* (on by default) recycles the instance right after
+  the update, so the container is recreated in place from the new template, keeping the machine and GPUs.
 
 ### Templates
 - Fixed: templates could not be deleted. VastGui sent the template's `hash_id`, which copies of a template share;
